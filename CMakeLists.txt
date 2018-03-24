@@ -1,5 +1,11 @@
 cmake_minimum_required (VERSION 2.6)
 
+# disable GLFW docs, examples and tests
+# see http://www.glfw.org/docs/latest/build_guide.html
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
 add_subdirectory(submodules/glfw)
 include_directories(submodules/glfw/include)
 include_directories(submodules/imgui)
