@@ -7,9 +7,6 @@
 [submodule "submodules/stb"]
 	path = submodules/stb
 	url = git@github.com:nothings/stb.git
-[submodule "submodules/git@github.com:jdupuy/dj_opengl.git"]
-	path = submodules/git@github.com:jdupuy/dj_opengl.git
-	url = git@github.com:jdupuy/dj_algebra.git
 [submodule "submodules/dj_opengl"]
 	path = submodules/dj_opengl
 	url = git@github.com:jdupuy/dj_opengl.git
