@@ -1,0 +1,18 @@
+[submodule "submodules/glfw"]
+	path = submodules/glfw
+	url = git@github.com:glfw/glfw.git
+[submodule "submodules/imgui"]
+	path = submodules/imgui
+	url = git@github.com:ocornut/imgui.git
+[submodule "submodules/stb"]
+	path = submodules/stb
+	url = git@github.com:nothings/stb.git
+[submodule "submodules/git@github.com:jdupuy/dj_opengl.git"]
+	path = submodules/git@github.com:jdupuy/dj_opengl.git
+	url = git@github.com:jdupuy/dj_algebra.git
+[submodule "submodules/dj_opengl"]
+	path = submodules/dj_opengl
+	url = git@github.com:jdupuy/dj_opengl.git
+[submodule "submodules/dj_algebra"]
+	path = submodules/dj_algebra
+	url = git@github.com:jdupuy/dj_algebra.git
