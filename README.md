@@ -13,7 +13,7 @@ git clone --recursive git@github.com:jdupuy/opengl-framework.git
 
 If you accidentally omitted the `--recursive` flag when cloning the repository you can retrieve the submodules like so:
 ```sh
-$ git submodule update --init --recursive
+git submodule update --init --recursive
 ```
 
 
