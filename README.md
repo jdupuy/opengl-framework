@@ -4,7 +4,7 @@
 
 (in progress)
 
-Cloning
+### Cloning
 
 Clone the repository and all its submodules using the following command:
 ```sh
