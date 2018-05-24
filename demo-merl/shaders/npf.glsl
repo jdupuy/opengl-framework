@@ -69,7 +69,7 @@ vec3 getBRDF(int n, vec3 dirIn, vec3 dirOut, vec3 dirNormal) {
 
 	vec3 dirH = normalize(dirIn + dirOut);
 	float thetaH = acos(dot(dirH, dirNormal));
-	float thetaD = acos(clamp(dot(dirIn, dirH), 0.0, 1.0));
+	float thetaD = acos(dot(dirIn, dirH));
 	float thetaI = acos(dot(dirIn, dirNormal));
 	float thetaO = acos(dot(dirOut, dirNormal));
 
