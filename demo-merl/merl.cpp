@@ -111,7 +111,7 @@ struct SphereManager {
 		{NULL, 0, 0},
 		{NULL, 0, 0},
 		NULL,
-		SHADING_MC_GGX,
+		SHADING_MC_MIS,
 		BRDF_MERL,
 		1.f
 	}
