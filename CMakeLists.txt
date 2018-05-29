@@ -23,14 +23,15 @@ set(IMGUI_INCLUDE_DIR imgui submodules/imgui)
 add_library(imgui STATIC imgui/imgui_impl.cpp ${IMGUI_SRC_FILES})
 
 # ------------------------------------------------------------------------------
-project (hello-window)
+project (opengl)
+
+# ------------------------------------------------------------------------------
 set(SRC_DIR demo-hello-window)
 include_directories(${SRC_DIR})
 add_executable(hello-window ${SRC_DIR}/hello-window.cpp ${SRC_DIR}/glad/glad.c)
 target_link_libraries(hello-window glfw)
 
 # ------------------------------------------------------------------------------
-project (hello-imgui)
 set(SRC_DIR demo-hello-imgui)
 include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
@@ -39,7 +40,6 @@ target_link_libraries(hello-imgui glfw imgui)
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
-project (merl)
 set(SRC_DIR demo-merl)
 include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
