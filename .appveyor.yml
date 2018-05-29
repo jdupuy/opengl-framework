@@ -14,6 +14,7 @@ build_script:
   - mkdir build
   - cd build
   - cmake -G "Visual Studio 15 2017 Win64" ..
+  - dir
   - set MSBuildLogger="C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
   - set MSBuildOptions=/v:m /p:Configuration=Release /logger:%MSBuildLogger%
   - msbuild %MSBuildOptions% opengl.sln
