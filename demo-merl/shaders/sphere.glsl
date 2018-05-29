@@ -41,7 +41,7 @@ vec3 evalEnvmap(vec3 dir)
 {
 	float u1 = atan(dir.x, dir.y) / M_PI * 0.5 + 0.5;
 	float u2 = 1.0 - acos(dir.z) / M_PI;
-	return texture(u_EnvmapSampler, vec2(u1, u2)).rgb;
+	return textureLod(u_EnvmapSampler, vec2(u1, u2), 0.0).rgb;
 }
 
 vec3 evalBrdf(vec3 wi, vec3 wo)
@@ -164,7 +164,7 @@ void main(void)
 		float h2 = hash(gl_FragCoord.yx);
 		vec2 u2 = mod(vec2(h1, h2) + rand(j).xy, vec2(1.0));
 
-		// importance sample the BRDF
+		// importance sample the GGX Approx
 		if (true) {
 			vec3 wm = ggx_sample(u2, wo, u_Alpha);
 			vec3 wi = 2.0 * wm * dot(wo, wm) - wo;
