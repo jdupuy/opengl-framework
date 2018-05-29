@@ -106,7 +106,7 @@ struct SphereManager {
 	} shading;
 } g_sphere = {
 	{false},
-	{24, 48, -1, -1}, // sphere
+	{32, 64, -1, -1}, // sphere
 	{
 		{NULL, 0, 0},
 		{NULL, 0, 0},
