@@ -8,8 +8,8 @@ uniform int u_SamplesPerPass;
 
 
 struct Transform {
-	mat4 model;
 	mat4 modelView;
+	mat4 projection;
 	mat4 modelViewProjection;
 	mat4 viewInv;
 };
