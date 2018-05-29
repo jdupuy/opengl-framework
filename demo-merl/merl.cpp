@@ -54,7 +54,7 @@ struct FramebufferManager {
 	struct {int fixed;} msaa;
 	struct {float r, g, b;} clearColor;
 } g_framebuffer = {
-	VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT, AA_MSAA2, 0, 8, 1024 * 1024,
+	VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT, AA_MSAA2, 0, 4, 1024 * 1024,
 	{true, true},
 	{false},
 	{61./255., 119./255., 192./225}
@@ -309,7 +309,7 @@ void configureBackgroundProgram()
 	                   g_framebuffer.clearColor.b);
 	glProgramUniform1i(g_gl.programs[PROGRAM_BACKGROUND],
 	                   g_gl.uniforms[UNIFORM_BACKGROUND_ENVMAP_SAMPLER],
-	                   TEXTURE_NPF);
+	                   TEXTURE_ENVMAP);
 }
 
 // -----------------------------------------------------------------------------
@@ -394,6 +394,7 @@ bool loadBackgroundProgram()
 	char buf[1024];
 
 	LOG("Loading {Background-Program}\n");
+	djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
 	djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "background.glsl"));
 	if (!djgp_to_gl(djp, 430, false, true, program)) {
 		LOG("=> Failure <=\n");
@@ -779,7 +780,7 @@ bool loadSphereDataBuffers(float dt = 0)
 {
 	static bool first = true;
 	struct Transform {
-		dja::mat4 model, modelView, modelViewProjection, viewInv;
+		dja::mat4 modelView, projection, modelViewProjection, viewInv;
 	} transform;
 
 	if (first) {
@@ -800,9 +801,9 @@ bool loadSphereDataBuffers(float dt = 0)
 
 
 	// upload transformations
-	transform.model     = dja::mat4(1.f);
-	transform.modelView = view * transform.model;
-	transform.modelViewProjection = projection * transform.modelView;
+	transform.projection = projection;
+	transform.modelView  = view * dja::mat4(1);
+	transform.modelViewProjection = transform.projection * transform.modelView;
 	transform.viewInv = viewInv;
 
 	// upload planet data
