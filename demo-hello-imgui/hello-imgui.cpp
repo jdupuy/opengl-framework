@@ -13,6 +13,7 @@
 // -----------------------------------------------------------------------------
 void renderGui()
 {
+	static bool showDemoWindow = false;
 	ImGui::Begin("Window");
 	{
 		static float f = 0.0f;
@@ -26,8 +27,12 @@ void renderGui()
 		ImGui::Text("counter = %d", counter);
 
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::Checkbox("ShowDemoWindow", &showDemoWindow);
 	}
 	ImGui::End();
+	
+	if (showDemoWindow)
+		ImGui::ShowDemoWindow(&showDemoWindow);
 
 	ImGui::Render();
 }
@@ -90,7 +95,7 @@ int main(int argc, char **argv)
 
 	// Create the Window
 	LOG("Loading {Window-Main}\n");
-	GLFWwindow* window = glfwCreateWindow(800, 600, "Hello Imgui", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(1024, 768, "Hello Imgui", NULL, NULL);
 	if (window == NULL) {
 		LOG("=> Failure <=\n");
 		glfwTerminate();
