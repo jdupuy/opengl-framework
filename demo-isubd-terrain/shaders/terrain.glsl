@@ -60,7 +60,7 @@ void main(void)
  */
 #ifdef TESS_CONTROL_SHADER
 layout (vertices = 1) out;
-layout (location = 0) out Patch {
+out Patch {
     vec3 vertices[3];
     flat uint key;
 } o_Patch[];
@@ -111,7 +111,7 @@ void main()
     vec3 triangleCenterMV = (mv * vec4(triangleCenter, 1)).xyz;
     float z = length(triangleCenterMV);
     int targetLod = int(distanceToLod(z, u_LodFactor));
-    targetLod = 4;
+    targetLod = 0;
     updateSubdBuffer(primID, key, targetLod);
 
     // set output data
@@ -137,7 +137,7 @@ void main()
  */
 #ifdef TESS_EVALUATION_SHADER
 layout (triangles, ccw, equal_spacing) in;
-layout (location = 0) in Patch {
+in Patch {
     vec3 vertices[3];
     flat uint key;
 } i_Patch[];
