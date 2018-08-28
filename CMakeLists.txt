@@ -68,6 +68,6 @@ set(SRC_DIR demo-isubd-terrain)
 include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-terrain ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
-target_link_libraries(demo-isubd-terrain glfw imgui)
+target_link_libraries(isubd-terrain glfw imgui)
 unset(SRC_FILES)
 
