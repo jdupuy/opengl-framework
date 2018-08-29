@@ -111,6 +111,8 @@ void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3], out vec3 v_out_p[3])
 
 float distanceToLod(float z, float lodFactor)
 {
+    // Note that we multiply the result by two because the triangle's
+    // edge lengths decreases by half every two subdivision steps.
     return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 

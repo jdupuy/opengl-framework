@@ -47,7 +47,7 @@ float dmap(vec2 pos)
     return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
 }
 
-float computeLod(vec3 c, float bias = 1.0)
+float computeLod(vec3 c)
 {
 #if FLAG_DISPLACE
     c.z+= dmap(u_Transform.viewInv[3].xy);
@@ -56,10 +56,10 @@ float computeLod(vec3 c, float bias = 1.0)
     vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
     float z = length(cxf);
 
-    return distanceToLod(z, u_LodFactor * bias);
+    return distanceToLod(z, u_LodFactor);
 }
 
-float computeLod(in vec3 v[3], float bias = 1.0)
+float computeLod(in vec3 v[3])
 {
     vec3 c = (v[0] + v[1] + v[2]) / 3.0f;
 
@@ -103,7 +103,7 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
 
         u_SubdBufferOut[idx1] = uvec2(primID, children[0]);
         u_SubdBufferOut[idx2] = uvec2(primID, children[1]);
-    } else if (/* merge ? */ keyLod > parentLod && !isRootKey(key) && false) {
+    } else if (/* merge ? */ keyLod > (parentLod+1) && !isRootKey(key) && false) {
         if (isChildZeroKey(key)) {
             uint idx = atomicCounterIncrement(u_SubdBufferCounter);
 
@@ -193,29 +193,10 @@ in Patch {
     flat uint key;
 } i_Patch[];
 
-vec2 morphVertex(vec2 u, float currentLod, float targetLod)
-{
-    float patchTessLevel = PATCH_TESS_LEVEL;
-    vec2 fracPart = fract(u * patchTessLevel) / patchTessLevel;
-    vec2 intPart = floor(u * patchTessLevel);
-    vec2 sgn = 2.0 * mod(intPart, 2.0) - 1.0;
-    float tmp = clamp(currentLod -  targetLod, 0.0, 1.0);
-    float weight = smoothstep(0.4, 0.5, tmp);
-
-    return (u + sgn * fracPart * weight);
-}
-
 void main()
 {
     vec3 v[3] = i_Patch[0].vertices;
     vec3 finalVertex = berp(v, gl_TessCoord.xy);
-
-#if FLAG_MORPH
-    float currentLod = findMSB(i_Patch[0].key);
-    float targetLod = computeLod(finalVertex, sqrt(2.0));
-    vec2 u = morphVertex(gl_TessCoord.xy, currentLod, targetLod);
-    finalVertex = berp(v, u);
-#endif
 
 #if FLAG_DISPLACE
     finalVertex.z+= dmap(finalVertex.xy);
