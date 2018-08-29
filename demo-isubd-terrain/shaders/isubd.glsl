@@ -11,19 +11,19 @@ void childrenKeys(in uint key, out uint children[2])
     children[1] = (key << 1u) | 1u;
 }
 
-bool isChildZeroKey(in uint key)
-{
-    return ((key & 1u) == 0u);
-}
-
 bool isRootKey(in uint key)
 {
-    return key == 1u;
+    return (key == 1u);
 }
 
 bool isLeafKey(in uint key)
 {
     return findMSB(key) == 31;
+}
+
+bool isChildZeroKey(in uint key)
+{
+    return ((key & 1u) == 0u);
 }
 
 // get xform from bit value
@@ -61,10 +61,7 @@ mat3 keyToXform(in uint key, out mat3 xfp)
     }
 
     xfp = xf;
-    while (key > 1u) {
-        xf = bitToXform(key & 1u) * xf;
-        key = key >> 1u;
-    }
+    if (key > 1u) xf = bitToXform(key & 1u) * xf;
 
     return xf;
 }

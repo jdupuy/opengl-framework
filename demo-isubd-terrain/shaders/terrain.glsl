@@ -107,17 +107,28 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
 
         u_SubdBufferOut[idx1] = uvec2(primID, children[0]);
         u_SubdBufferOut[idx2] = uvec2(primID, children[1]);
-    } else if (/* merge ? */ keyLod >= (parentLod + 0) && !isRootKey(key) && true) {
-        if (isChildZeroKey(key)) {
+    } else if (/* keep ? */ keyLod <= parentLod + 1) {
+        uint idx = atomicCounterIncrement(u_SubdBufferCounter);
+
+        u_SubdBufferOut[idx] = uvec2(primID, key);
+    } else /* merge ? */ {
+        if (isRootKey(key)) {
+            uint idx = atomicCounterIncrement(u_SubdBufferCounter);
+
+            u_SubdBufferOut[idx] = uvec2(primID, key);
+        } else if (isChildZeroKey(key)) {
             uint idx = atomicCounterIncrement(u_SubdBufferCounter);
 
             u_SubdBufferOut[idx] = uvec2(primID, parentKey(key));
         }
-    } else /* keep ? */ {
+    }
+#if 0
+    else /* keep ? */ {
         uint idx = atomicCounterIncrement(u_SubdBufferCounter);
 
         u_SubdBufferOut[idx] = uvec2(primID, key);
     }
+#endif
 }
 
 void main()
@@ -136,7 +147,6 @@ void main()
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
     vec3 v[3], vp[3]; subd(key, v_in, v, vp);
-    int currentLod = findMSB(key);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
