@@ -61,8 +61,12 @@ float computeLod(vec3 c)
 
 float computeLod(in vec3 v[3])
 {
+#if 0
     vec3 c = (v[0] + v[1] + v[2]) / 3.0f;
-
+#else
+    // crack-free !!!
+    vec3 c = (v[1] + v[2]) / 2.0;
+#endif
     return computeLod(c);
 }
 
@@ -103,7 +107,7 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
 
         u_SubdBufferOut[idx1] = uvec2(primID, children[0]);
         u_SubdBufferOut[idx2] = uvec2(primID, children[1]);
-    } else if (/* merge ? */ keyLod > (parentLod+1) && !isRootKey(key) && false) {
+    } else if (/* merge ? */ keyLod >= (parentLod + 0) && !isRootKey(key) && true) {
         if (isChildZeroKey(key)) {
             uint idx = atomicCounterIncrement(u_SubdBufferCounter);
 
@@ -133,7 +137,6 @@ void main()
     uint key = u_SubdBufferIn[threadID].y;
     vec3 v[3], vp[3]; subd(key, v_in, v, vp);
     int currentLod = findMSB(key);
-    //vec3 vr = ((currentLod % 2) == 0) ? v[0] : (v[1] + v[2]) / 2.0;
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -193,6 +196,8 @@ in Patch {
     flat uint key;
 } i_Patch[];
 
+layout(location = 0) out vec2 o_TexCoord;
+
 void main()
 {
     vec3 v[3] = i_Patch[0].vertices;
@@ -202,6 +207,7 @@ void main()
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
+    o_TexCoord = gl_TessCoord.xy;
     gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
 }
 #endif
@@ -213,10 +219,12 @@ void main()
  * This fragment shader is responsible for shading the final geometry.
  */
 #ifdef FRAGMENT_SHADER
+layout(location = 0) in vec2 i_TexCoord;
 layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
+    o_FragColor = vec4(i_TexCoord, 0, 1);
     o_FragColor = vec4(1);
 }
 

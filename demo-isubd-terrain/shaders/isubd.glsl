@@ -61,8 +61,9 @@ mat3 keyToXform(in uint key, out mat3 xfp)
     }
 
     xfp = xf;
-    if (key > 1u) {
+    while (key > 1u) {
         xf = bitToXform(key & 1u) * xf;
+        key = key >> 1u;
     }
 
     return xf;
