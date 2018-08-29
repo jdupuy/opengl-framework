@@ -32,8 +32,8 @@
 // Tweakable Constants
 //
 ////////////////////////////////////////////////////////////////////////////////
-#define VIEWER_DEFAULT_WIDTH  1280
-#define VIEWER_DEFAULT_HEIGHT 720
+#define VIEWER_DEFAULT_WIDTH  1680
+#define VIEWER_DEFAULT_HEIGHT 1050
 
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
@@ -72,17 +72,17 @@ struct CameraManager {
 // -----------------------------------------------------------------------------
 // Quadtree Manager
 struct TerrainManager {
-    struct {bool displace, cull, freeze, wire, reset;} flags;
+    struct {bool displace, cull, morph, freeze, wire, reset;} flags;
     int gpuSubd;
     int pingPong;
     float displacementScale;
     float primitivePixelLengthTarget;
 } g_terrain = {
-    {true, true, false, false, true},
-    4,
+    {true, true, false, false, true, true},
+    3,
     0,
-    1.f,
-    4.f
+    0.1f,
+    16.f
 };
 
 // -----------------------------------------------------------------------------
@@ -264,7 +264,7 @@ void configureViewerProgram()
 void configureTerrainProgram()
 {
     float lodFactor = 2.0f * tan(radians(g_camera.fovy) / 2.0f)
-                    / g_framebuffer.w * g_terrain.gpuSubd
+                    / g_framebuffer.w * (1 << g_terrain.gpuSubd)
                     * g_terrain.primitivePixelLengthTarget;
 
     glProgramUniform1i(g_gl.programs[PROGRAM_TERRAIN],
@@ -335,6 +335,15 @@ bool loadTerrainProgram()
     char buf[1024];
 
     LOG("Loading {Terrain-Program}\n");
+    if (g_terrain.flags.displace)
+        djgp_push_string(djp, "#define FLAG_DISPLACE 1\n");
+    if (g_terrain.flags.cull)
+        djgp_push_string(djp, "#define FLAG_CULL 1\n");
+    if (g_terrain.flags.freeze)
+        djgp_push_string(djp, "#define FLAG_FREEZE 1\n");
+    if (g_terrain.flags.morph)
+        djgp_push_string(djp, "#define FLAG_MORPH 1\n");
+
     djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_terrain.gpuSubd);
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", STREAM_SUBD_COUNTER);
@@ -344,6 +353,7 @@ bool loadTerrainProgram()
                      BUFFER_GEOMETRY_INDEXES);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "cull.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain.glsl"));
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -828,8 +838,8 @@ bool loadFramebuffers()
 {
     bool v = true;
 
-    v&= loadBackFramebuffer();
-    v&= loadSceneFramebuffer();
+    if (v) v&= loadBackFramebuffer();
+    if (v) v&= loadSceneFramebuffer();
 
     return v;
 }
@@ -904,8 +914,9 @@ void renderScene()
     glViewport(0, 0, g_framebuffer.w, g_framebuffer.h);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glPatchParameteri(GL_PATCH_VERTICES, 1);
+    if (g_terrain.flags.wire)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // clear framebuffer
     glClearColor(1.0, 0.0, 0.0, 1.0);
@@ -941,8 +952,8 @@ void renderScene()
     offset = nextOffset;
 
     // reset GL state
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    //glDisable(GL_CULL_FACE);
+    if (g_terrain.flags.wire)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glDisable(GL_DEPTH_TEST);
 }
 
@@ -1043,7 +1054,7 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::End();
         // Terrain Widgets
         ImGui::SetNextWindowPos(ImVec2(10, 140)/*, ImGuiSetCond_FirstUseEver*/);
-        ImGui::SetNextWindowSize(ImVec2(250, 450)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::SetNextWindowSize(ImVec2(510, 180)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Terrain");
         {
             ImGui::Text("CPU_dt: %.3f %s",
@@ -1052,11 +1063,27 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::Text("GPU_dt: %.3f %s",
                         gpuDt < 1. ? gpuDt * 1e3 : gpuDt,
                         gpuDt < 1. ? "ms" : " s");
+            if (ImGui::Checkbox("displace", &g_terrain.flags.displace))
+                loadTerrainProgram();
+            ImGui::SameLine();
+            if (ImGui::Checkbox("cull", &g_terrain.flags.cull))
+                loadTerrainProgram();
+            ImGui::SameLine();
+            if (ImGui::Checkbox("morph", &g_terrain.flags.morph))
+                loadTerrainProgram();
+            ImGui::SameLine();
+            ImGui::Checkbox("wire", &g_terrain.flags.wire);
+            ImGui::SameLine();
+            if (ImGui::Checkbox("freeze", &g_terrain.flags.freeze))
+                loadTerrainProgram();
             if (ImGui::SliderInt("PatchSubdLevel", &g_terrain.gpuSubd, 0, 6)) {
                 loadTerrainProgram();
                 g_terrain.flags.reset = true;
             }
             if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 64)) {
+                configureTerrainProgram();
+            }
+            if (ImGui::SliderFloat("DmapScale", &g_terrain.displacementScale, 0.f, 1.f)) {
                 configureTerrainProgram();
             }
         }

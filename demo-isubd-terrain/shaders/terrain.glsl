@@ -2,16 +2,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Sahder for Terrain Rendering
 //
-struct Transform {
-	mat4 modelView;
-	mat4 projection;
-	mat4 modelViewProjection;
-	mat4 viewInv;
-};
-layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
-uniform Transforms {
-	Transform u_Transform;
-};
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
 readonly buffer SubdBuffer1 {
@@ -36,9 +26,45 @@ readonly buffer IndexBuffer {
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
+struct Transform {
+	mat4 modelView;
+	mat4 projection;
+	mat4 modelViewProjection;
+	mat4 viewInv;
+};
+
+layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
+uniform Transforms {
+	Transform u_Transform;
+};
+
 uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
+
+float dmap(vec2 pos)
+{
+    return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
+}
+
+float computeLod(vec3 c, float bias = 1.0)
+{
+#if FLAG_DISPLACE
+    c.z+= dmap(u_Transform.viewInv[3].xy);
+#endif
+
+    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
+    float z = length(cxf);
+
+    return distanceToLod(z, u_LodFactor * bias);
+}
+
+float computeLod(in vec3 v[3], float bias = 1.0)
+{
+    vec3 c = (v[0] + v[1] + v[2]) / 3.0f;
+
+    return computeLod(c);
+}
 
 // -----------------------------------------------------------------------------
 /**
@@ -65,20 +91,20 @@ out Patch {
     flat uint key;
 } o_Patch[];
 
-void updateSubdBuffer(uint primID, uint key, int targetLod) {
+void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
     // extract subdivision level associated to the key
     int keyLod = findMSB(key);
 
     // update the key accordingly
-    if (/* subdivide ? */ keyLod < targetLod && !isLeaf(key)) {
+    if (/* subdivide ? */ keyLod < targetLod && !isLeafKey(key)) {
         uint children[2]; childrenKeys(key, children);
         uint idx1 = atomicCounterIncrement(u_SubdBufferCounter);
         uint idx2 = atomicCounterIncrement(u_SubdBufferCounter);
 
         u_SubdBufferOut[idx1] = uvec2(primID, children[0]);
         u_SubdBufferOut[idx2] = uvec2(primID, children[1]);
-    } else if (/* merge ? */ keyLod > targetLod && !isRoot(key)) {
-        if (isChildZero(key)) {
+    } else if (/* merge ? */ keyLod > parentLod && !isRootKey(key) && false) {
+        if (isChildZeroKey(key)) {
             uint idx = atomicCounterIncrement(u_SubdBufferCounter);
 
             u_SubdBufferOut[idx] = uvec2(primID, parentKey(key));
@@ -105,26 +131,51 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec3 v[3]; subd(key, v_in, v);
-    vec3 triangleCenter = (v[0] + v[1] + v[2]) / 3.0f;
-    mat4 mv = u_Transform.modelView;
-    vec3 triangleCenterMV = (mv * vec4(triangleCenter, 1)).xyz;
-    float z = length(triangleCenterMV);
-    int targetLod = int(distanceToLod(z, u_LodFactor));
-    targetLod = 0;
-    updateSubdBuffer(primID, key, targetLod);
+    vec3 v[3], vp[3]; subd(key, v_in, v, vp);
+    int currentLod = findMSB(key);
+    //vec3 vr = ((currentLod % 2) == 0) ? v[0] : (v[1] + v[2]) / 2.0;
+    int targetLod = int(computeLod(v));
+    int parentLod = int(computeLod(vp));
+#if FLAG_FREEZE
+    targetLod = parentLod = findMSB(key);
+#endif
+    updateSubdBuffer(primID, key, targetLod, parentLod);
 
-    // set output data
-    o_Patch[gl_InvocationID].vertices = v;
-    o_Patch[gl_InvocationID].key = key;
+#if FLAG_CULL
+    // Cull invisible nodes
+    mat4 mvp = u_Transform.modelViewProjection;
+    vec3 bmin = min(min(v[0], v[1]), v[2]);
+    vec3 bmax = max(max(v[0], v[1]), v[2]);
 
-    // set tess levels
-    int tessLevel = PATCH_TESS_LEVEL;
-    gl_TessLevelInner[0] = tessLevel;
-    gl_TessLevelInner[1] = tessLevel;
-    gl_TessLevelOuter[0] = tessLevel;
-    gl_TessLevelOuter[1] = tessLevel;
-    gl_TessLevelOuter[2] = tessLevel;
+    // account for displacement in bound computations
+#   if FLAG_DISPLACE
+    bmin.z = -u_DmapFactor / 2.0;
+    bmax.z = +u_DmapFactor / 2.0;
+#   endif
+
+    if (/* is visible ? */dj_culltest(mvp, bmin, bmax)) {
+#else
+    if (true) {
+#endif // FLAG_CULL
+        // set tess levels
+        int tessLevel = PATCH_TESS_LEVEL;
+        gl_TessLevelInner[0] =
+        gl_TessLevelInner[1] =
+        gl_TessLevelOuter[0] =
+        gl_TessLevelOuter[1] =
+        gl_TessLevelOuter[2] = tessLevel;
+
+        // set output data
+        o_Patch[gl_InvocationID].vertices = v;
+        o_Patch[gl_InvocationID].key = key;
+    } else /* is not visible ? */ {
+        // cull the geometry
+        gl_TessLevelInner[0] =
+        gl_TessLevelInner[1] =
+        gl_TessLevelOuter[0] =
+        gl_TessLevelOuter[1] =
+        gl_TessLevelOuter[2] = 0;
+    }
 }
 #endif
 
@@ -142,10 +193,33 @@ in Patch {
     flat uint key;
 } i_Patch[];
 
+vec2 morphVertex(vec2 u, float currentLod, float targetLod)
+{
+    float patchTessLevel = PATCH_TESS_LEVEL;
+    vec2 fracPart = fract(u * patchTessLevel) / patchTessLevel;
+    vec2 intPart = floor(u * patchTessLevel);
+    vec2 sgn = 2.0 * mod(intPart, 2.0) - 1.0;
+    float tmp = clamp(currentLod -  targetLod, 0.0, 1.0);
+    float weight = smoothstep(0.4, 0.5, tmp);
+
+    return (u + sgn * fracPart * weight);
+}
+
 void main()
 {
     vec3 v[3] = i_Patch[0].vertices;
     vec3 finalVertex = berp(v, gl_TessCoord.xy);
+
+#if FLAG_MORPH
+    float currentLod = findMSB(i_Patch[0].key);
+    float targetLod = computeLod(finalVertex, sqrt(2.0));
+    vec2 u = morphVertex(gl_TessCoord.xy, currentLod, targetLod);
+    finalVertex = berp(v, u);
+#endif
+
+#if FLAG_DISPLACE
+    finalVertex.z+= dmap(finalVertex.xy);
+#endif
 
     gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
 }
@@ -162,7 +236,7 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    o_FragColor = vec4(0, 1, 0, 1);
+    o_FragColor = vec4(1);
 }
 
 #endif

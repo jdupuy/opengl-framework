@@ -11,17 +11,17 @@ void childrenKeys(in uint key, out uint children[2])
     children[1] = (key << 1u) | 1u;
 }
 
-bool isChildZero(in uint key)
+bool isChildZeroKey(in uint key)
 {
     return ((key & 1u) == 0u);
 }
 
-bool isRoot(in uint key)
+bool isRootKey(in uint key)
 {
     return key == 1u;
 }
 
-bool isLeaf(in uint key)
+bool isLeafKey(in uint key)
 {
     return findMSB(key) == 31;
 }
@@ -50,6 +50,24 @@ mat3 keyToXform(in uint key)
     return xf;
 }
 
+// get xform from key as well as xform from parent key
+mat3 keyToXform(in uint key, out mat3 xfp)
+{
+    mat3 xf = mat3(1.0f);
+
+    while (key > 3u) {
+        xf = bitToXform(key & 1u) * xf;
+        key = key >> 1u;
+    }
+
+    xfp = xf;
+    if (key > 1u) {
+        xf = bitToXform(key & 1u) * xf;
+    }
+
+    return xf;
+}
+
 // barycentric interpolation
 vec3 berp(in vec3 v[3], in vec2 u)
 {
@@ -69,8 +87,30 @@ void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3])
     v_out[2] = berp(v_in, u3);
 }
 
+// subdivision routine (vertex position only)
+// also computes parent position
+void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3], out vec3 v_out_p[3])
+{
+    mat3 xfp; mat3 xf = keyToXform(key, xfp);
+    vec2 u1 = (xf * vec3(0, 0, 1)).xy;
+    vec2 u2 = (xf * vec3(1, 0, 1)).xy;
+    vec2 u3 = (xf * vec3(0, 1, 1)).xy;
+
+    v_out[0] = berp(v_in, u1);
+    v_out[1] = berp(v_in, u2);
+    v_out[2] = berp(v_in, u3);
+
+    u1 = (xfp * vec3(0, 0, 1)).xy;
+    u2 = (xfp * vec3(1, 0, 1)).xy;
+    u3 = (xfp * vec3(0, 1, 1)).xy;
+
+    v_out_p[0] = berp(v_in, u1);
+    v_out_p[1] = berp(v_in, u2);
+    v_out_p[2] = berp(v_in, u3);
+}
+
 float distanceToLod(float z, float lodFactor)
 {
-    return -log2(clamp(z * lodFactor, 0.0f, 1.0f));
+    return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
