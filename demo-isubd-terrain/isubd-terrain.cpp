@@ -73,16 +73,19 @@ struct CameraManager {
 // Quadtree Manager
 struct TerrainManager {
     struct {bool displace, cull, freeze, wire, reset;} flags;
+    struct {
+        const char *pathToFile;
+        float scale;
+    } dmap;
     int gpuSubd;
     int pingPong;
-    float displacementScale;
     float primitivePixelLengthTarget;
 } g_terrain = {
-    {true, true, false, true, true},
-    3,
+    {true, true, false, false, true},
+    {NULL, 0.2f},
+    4,
     0,
-    0.1f,
-    16.f
+    8.f
 };
 
 // -----------------------------------------------------------------------------
@@ -106,7 +109,7 @@ struct AppManager {
     /*viewer*/ {
                    VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT,
                    true,
-                   2.2f, -1.0f
+                   2.2f, 0.4f
                },
     /*record*/ {false, 0, 0},
     /*frame*/  0, -1
@@ -272,7 +275,7 @@ void configureTerrainProgram()
                        TEXTURE_DMAP);
     glProgramUniform1f(g_gl.programs[PROGRAM_TERRAIN],
                        g_gl.uniforms[UNIFORM_TERRAIN_DMAP_FACTOR],
-                       g_terrain.displacementScale);
+                       g_terrain.dmap.scale);
     glProgramUniform1f(g_gl.programs[PROGRAM_TERRAIN],
                        g_gl.uniforms[UNIFORM_TERRAIN_LOD_FACTOR],
                        lodFactor);
@@ -506,6 +509,42 @@ bool loadBackFramebufferTexture()
 
 // -----------------------------------------------------------------------------
 /**
+ * Load the Displacement Texture
+ *
+ * This loads an R16 texture used as a displacement map
+ */
+bool loadDmapTexture()
+{
+    djg_texture *djgt = djgt_create(1);
+    GLuint *glt = &g_gl.textures[TEXTURE_DMAP];
+
+    LOG("Loading {Dmap-Texture}\n");
+    glActiveTexture(GL_TEXTURE0 + TEXTURE_DMAP);
+    djgt_push_image_u16(djgt, "height_16.png", 1);
+
+    if (!djgt_to_gl(djgt, GL_TEXTURE_2D, GL_R16, 1, 1, glt)) {
+        LOG("=> Failure <=\n");
+        djgt_release(djgt);
+
+        return false;
+    }
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_MIN_FILTER,
+                    GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_S,
+                    GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_T,
+                    GL_CLAMP_TO_EDGE);
+    glActiveTexture(GL_TEXTURE0);
+    djgt_release(djgt);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+// -----------------------------------------------------------------------------
+/**
  * Load All Textures
  */
 bool loadTextures()
@@ -514,6 +553,7 @@ bool loadTextures()
 
     if (v) v&= loadSceneFramebufferTexture();
     if (v) v&= loadBackFramebufferTexture();
+    if (v) v&= loadDmapTexture();
 
     return v;
 }
@@ -917,7 +957,7 @@ void renderScene()
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // clear framebuffer
-    glClearColor(1.0, 0.0, 0.0, 1.0);
+    glClearColor(0.5, 0.5, 0.5, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // bind buffers
@@ -1021,7 +1061,7 @@ void renderGui(double cpuDt, double gpuDt)
 
                 snprintf(buf, 1024, "screenshot%03i", cnt);
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                djgt_save_glcolorbuffer_bmp(GL_FRONT, GL_RGBA, buf);
+                djgt_save_glcolorbuffer_png(GL_FRONT, GL_RGBA, buf);
                 ++cnt;
             }
             if (ImGui::Button("Record"))
@@ -1078,7 +1118,7 @@ void renderGui(double cpuDt, double gpuDt)
             if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 64)) {
                 configureTerrainProgram();
             }
-            if (ImGui::SliderFloat("DmapScale", &g_terrain.displacementScale, 0.f, 1.f)) {
+            if (ImGui::SliderFloat("DmapScale", &g_terrain.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
             }
         }

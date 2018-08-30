@@ -45,7 +45,11 @@ uniform float u_LodFactor;
 // displacement map
 float dmap(vec2 pos)
 {
+#if 0
     return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
+#else
+    return (texture(u_DmapSampler, pos * 0.5 + 0.5).x) * u_DmapFactor;
+#endif
 }
 
 float distanceToLod(float z, float lodFactor)
@@ -157,8 +161,8 @@ void main()
 
     // account for displacement in bound computations
 #   if FLAG_DISPLACE
-    bmin.z = -u_DmapFactor / 2.0;
-    bmax.z = +u_DmapFactor / 2.0;
+    bmin.z = 0;
+    bmax.z = u_DmapFactor;
 #   endif
 
     if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
@@ -212,7 +216,7 @@ void main()
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
-    o_TexCoord = gl_TessCoord.xy;
+    o_TexCoord = finalVertex.xy;
     gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
 }
 #endif
@@ -229,8 +233,9 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
+    float z = dmap(i_TexCoord);
     o_FragColor = vec4(i_TexCoord, 0, 1);
-    o_FragColor = vec4(1);
+    o_FragColor.rgb = vec3(z*z);
 }
 
 #endif

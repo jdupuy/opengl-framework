@@ -39,17 +39,15 @@ void main(void)
 	vec4 color = vec4(0);
 	ivec2 P = ivec2(gl_FragCoord.xy);
 
-	// get framebuffer data
 #if MSAA_FACTOR
-	for (int i = 0; i < MSAA_FACTOR; ++i) {
-		vec4 c = texelFetch(u_FramebufferSampler, P, i);
-		if (c.a > 0.0) color+= c / c.a; // normalize by number of samples
-	}
-	color/= vec4(MSAA_FACTOR);
+    for (int i = 0; i < MSAA_FACTOR; ++i) {
+        color+= texelFetch(u_FramebufferSampler, P, i);
+    }
+    //color/= float(MSAA_FACTOR + 1);
 #else
-	color = texelFetch(u_FramebufferSampler, P, 0);
-	if (color.a > 0.0) color.rgb/= color.a;
+    color = texelFetch(u_FramebufferSampler, P, 0);
 #endif
+    if (color.a > 1.0) color.rgb/= color.a;
 
 	// make fragments store positive values
 	if (any(lessThan(color.rgb, vec3(0)))) {
