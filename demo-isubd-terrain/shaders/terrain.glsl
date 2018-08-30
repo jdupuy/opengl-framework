@@ -161,7 +161,7 @@ void main()
     bmax.z = +u_DmapFactor / 2.0;
 #   endif
 
-    if (/* is visible ? */fcull(mvp, bmin, bmax)) {
+    if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
 #else
     if (true) {
 #endif // FLAG_CULL

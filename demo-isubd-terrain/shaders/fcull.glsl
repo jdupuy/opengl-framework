@@ -7,7 +7,7 @@
 // Frustum Culling API
 //
 
-bool fcull(mat4 mvp, vec3 bmin, vec3 bmax);
+bool frustumCullingTest(mat4 mvp, vec3 bmin, vec3 bmax);
 
 //
 //
@@ -17,7 +17,7 @@ bool fcull(mat4 mvp, vec3 bmin, vec3 bmax);
 // *****************************************************************************
 // Frustum Implementation
 
-struct frustum {
+struct Frustum {
 	vec4 planes[6];
 };
 
@@ -29,7 +29,7 @@ struct frustum {
  * This procedure computes the planes of the frustum and normalizes 
  * them.
  */
-void frustum_load(out frustum f, mat4 mvp)
+void loadFrustum(out Frustum f, mat4 mvp)
 {
 	for (int i = 0; i < 3; ++i)
 	for (int j = 0; j < 2; ++j) {
@@ -49,7 +49,7 @@ void frustum_load(out frustum f, mat4 mvp)
  * See the View Frustum Culling tutorial @ LightHouse3D.com
  * http://www.lighthouse3d.com/tutorials/view-frustum-culling/geometric-approach-testing-boxes-ii/
  */
-vec3 nvertex(vec3 bmin, vec3 bmax, vec3 n)
+vec3 negativeVertex(vec3 bmin, vec3 bmax, vec3 n)
 {
 	bvec3 b = greaterThan(n, vec3(0));
 	return mix(bmin, bmax, b);
@@ -63,16 +63,16 @@ vec3 nvertex(vec3 bmin, vec3 bmax, vec3 n)
  * The test is based on the View Frustum Culling tutorial @ LightHouse3D.com
  * http://www.lighthouse3d.com/tutorials/view-frustum-culling/geometric-approach-testing-boxes-ii/
  */
-bool fcull(mat4 mvp, vec3 bmin, vec3 bmax)
+bool frustumCullingTest(mat4 mvp, vec3 bmin, vec3 bmax)
 {
-	float a = 1.0;
-	frustum f;
+	float a = 1.0f;
+	Frustum f;
 
-	frustum_load(f, mvp);
-	for (int i = 0; i < 6 && a >= 0.0; ++i) {
-		vec3 n = nvertex(bmin, bmax, f.planes[i].xyz);
+	loadFrustum(f, mvp);
+	for (int i = 0; i < 6 && a >= 0.0f; ++i) {
+		vec3 n = negativeVertex(bmin, bmax, f.planes[i].xyz);
 
-		a = dot(vec4(n, 1.0), f.planes[i]);
+		a = dot(vec4(n, 1.0f), f.planes[i]);
 	}
 
 	return (a >= 0.0);
