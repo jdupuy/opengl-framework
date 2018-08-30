@@ -4,12 +4,12 @@
 //
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
-readonly buffer SubdBuffer1 {
+readonly buffer SubdBufferIn {
 	uvec2 u_SubdBufferIn[];
 };
 
 layout (std430, binding = BUFFER_BINDING_SUBD2)
-buffer SubdBuffer2 {
+buffer SubdBufferOut {
 	uvec2 u_SubdBufferOut[];
 };
 
