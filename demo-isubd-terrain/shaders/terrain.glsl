@@ -42,9 +42,17 @@ uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
 
+// displacement map
 float dmap(vec2 pos)
 {
     return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
+}
+
+float distanceToLod(float z, float lodFactor)
+{
+    // Note that we multiply the result by two because the triangle's
+    // edge lengths decreases by half every two subdivision steps.
+    return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
 float computeLod(vec3 c)
@@ -61,12 +69,7 @@ float computeLod(vec3 c)
 
 float computeLod(in vec3 v[3])
 {
-#if 0
-    vec3 c = (v[0] + v[1] + v[2]) / 3.0f;
-#else
-    // crack-free !!!
     vec3 c = (v[1] + v[2]) / 2.0;
-#endif
     return computeLod(c);
 }
 
@@ -95,6 +98,13 @@ out Patch {
     flat uint key;
 } o_Patch[];
 
+void writeKey(uint primID, uint key)
+{
+    uint idx = atomicCounterIncrement(u_SubdBufferCounter);
+
+    u_SubdBufferOut[idx] = uvec2(primID, key);
+}
+
 void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
     // extract subdivision level associated to the key
     int keyLod = findMSB(key);
@@ -102,33 +112,18 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
     // update the key accordingly
     if (/* subdivide ? */ keyLod < targetLod && !isLeafKey(key)) {
         uint children[2]; childrenKeys(key, children);
-        uint idx1 = atomicCounterIncrement(u_SubdBufferCounter);
-        uint idx2 = atomicCounterIncrement(u_SubdBufferCounter);
 
-        u_SubdBufferOut[idx1] = uvec2(primID, children[0]);
-        u_SubdBufferOut[idx2] = uvec2(primID, children[1]);
-    } else if (/* keep ? */ keyLod <= parentLod + 1) {
-        uint idx = atomicCounterIncrement(u_SubdBufferCounter);
-
-        u_SubdBufferOut[idx] = uvec2(primID, key);
+        writeKey(primID, children[0]);
+        writeKey(primID, children[1]);
+    } else if (/* keep ? */ keyLod <= (parentLod + 1)) {
+        writeKey(primID, key);
     } else /* merge ? */ {
-        if (isRootKey(key)) {
-            uint idx = atomicCounterIncrement(u_SubdBufferCounter);
-
-            u_SubdBufferOut[idx] = uvec2(primID, key);
-        } else if (isChildZeroKey(key)) {
-            uint idx = atomicCounterIncrement(u_SubdBufferCounter);
-
-            u_SubdBufferOut[idx] = uvec2(primID, parentKey(key));
+        if (/* is root ? */isRootKey(key)) {
+            writeKey(primID, key);
+        } else if (/* is zero child ? */isChildZeroKey(key)) {
+            writeKey(primID, parentKey(key));
         }
     }
-#if 0
-    else /* keep ? */ {
-        uint idx = atomicCounterIncrement(u_SubdBufferCounter);
-
-        u_SubdBufferOut[idx] = uvec2(primID, key);
-    }
-#endif
 }
 
 void main()
@@ -146,7 +141,13 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
+#if 1
     vec3 v[3], vp[3]; subd(key, v_in, v, vp);
+#else
+    vec3 v[3], vp[3];
+    subd(key, v_in, v);
+    subd(parentKey(key), v_in, vp);
+#endif
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE

@@ -72,13 +72,13 @@ struct CameraManager {
 // -----------------------------------------------------------------------------
 // Quadtree Manager
 struct TerrainManager {
-    struct {bool displace, cull, morph, freeze, wire, reset;} flags;
+    struct {bool displace, cull, freeze, wire, reset;} flags;
     int gpuSubd;
     int pingPong;
     float displacementScale;
     float primitivePixelLengthTarget;
 } g_terrain = {
-    {true, true, false, false, true, true},
+    {true, true, false, true, true},
     3,
     0,
     0.1f,
@@ -341,8 +341,6 @@ bool loadTerrainProgram()
         djgp_push_string(djp, "#define FLAG_CULL 1\n");
     if (g_terrain.flags.freeze)
         djgp_push_string(djp, "#define FLAG_FREEZE 1\n");
-    if (g_terrain.flags.morph)
-        djgp_push_string(djp, "#define FLAG_MORPH 1\n");
 
     djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_terrain.gpuSubd);
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
@@ -1067,9 +1065,6 @@ void renderGui(double cpuDt, double gpuDt)
                 loadTerrainProgram();
             ImGui::SameLine();
             if (ImGui::Checkbox("cull", &g_terrain.flags.cull))
-                loadTerrainProgram();
-            ImGui::SameLine();
-            if (ImGui::Checkbox("morph", &g_terrain.flags.morph))
                 loadTerrainProgram();
             ImGui::SameLine();
             ImGui::Checkbox("wire", &g_terrain.flags.wire);

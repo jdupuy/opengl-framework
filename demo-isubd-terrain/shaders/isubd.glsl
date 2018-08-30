@@ -53,17 +53,9 @@ mat3 keyToXform(in uint key)
 // get xform from key as well as xform from parent key
 mat3 keyToXform(in uint key, out mat3 xfp)
 {
-    mat3 xf = mat3(1.0f);
-
-    while (key > 3u) {
-        xf = bitToXform(key & 1u) * xf;
-        key = key >> 1u;
-    }
-
-    xfp = xf;
-    if (key > 1u) xf = bitToXform(key & 1u) * xf;
-
-    return xf;
+    // TODO: optimize ?
+    xfp = keyToXform(parentKey(key));
+    return keyToXform(key);
 }
 
 // barycentric interpolation
@@ -93,24 +85,15 @@ void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3], out vec3 v_out_p[3])
     vec2 u1 = (xf * vec3(0, 0, 1)).xy;
     vec2 u2 = (xf * vec3(1, 0, 1)).xy;
     vec2 u3 = (xf * vec3(0, 1, 1)).xy;
+    vec2 u4 = (xfp * vec3(0, 0, 1)).xy;
+    vec2 u5 = (xfp * vec3(1, 0, 1)).xy;
+    vec2 u6 = (xfp * vec3(0, 1, 1)).xy;
 
     v_out[0] = berp(v_in, u1);
     v_out[1] = berp(v_in, u2);
     v_out[2] = berp(v_in, u3);
 
-    u1 = (xfp * vec3(0, 0, 1)).xy;
-    u2 = (xfp * vec3(1, 0, 1)).xy;
-    u3 = (xfp * vec3(0, 1, 1)).xy;
-
-    v_out_p[0] = berp(v_in, u1);
-    v_out_p[1] = berp(v_in, u2);
-    v_out_p[2] = berp(v_in, u3);
+    v_out_p[0] = berp(v_in, u4);
+    v_out_p[1] = berp(v_in, u5);
+    v_out_p[2] = berp(v_in, u6);
 }
-
-float distanceToLod(float z, float lodFactor)
-{
-    // Note that we multiply the result by two because the triangle's
-    // edge lengths decreases by half every two subdivision steps.
-    return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
-}
-
