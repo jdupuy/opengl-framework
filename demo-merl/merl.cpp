@@ -725,7 +725,7 @@ bool loadEnvmapTexture()
 		GLuint *glt = &g_gl.textures[TEXTURE_ENVMAP];
 
 		glActiveTexture(GL_TEXTURE0 + TEXTURE_ENVMAP);
-		djgt_push_hdrimage(djgt, path, 1);
+        djgt_push_image_hdr(djgt, path, 1);
 
 		if (!djgt_to_gl(djgt, GL_TEXTURE_2D, GL_RGB9_E5, 1, 1, glt)) {
 			LOG("=> Failure <=\n");
