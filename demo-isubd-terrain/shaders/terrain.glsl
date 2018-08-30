@@ -141,13 +141,7 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-#if 1
     vec3 v[3], vp[3]; subd(key, v_in, v, vp);
-#else
-    vec3 v[3], vp[3];
-    subd(key, v_in, v);
-    subd(parentKey(key), v_in, vp);
-#endif
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
