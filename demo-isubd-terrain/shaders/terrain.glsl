@@ -167,7 +167,7 @@ void main()
     bmax.z = +u_DmapFactor / 2.0;
 #   endif
 
-    if (/* is visible ? */dj_culltest(mvp, bmin, bmax)) {
+    if (/* is visible ? */fcull(mvp, bmin, bmax)) {
 #else
     if (true) {
 #endif // FLAG_CULL

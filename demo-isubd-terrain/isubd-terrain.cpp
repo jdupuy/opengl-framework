@@ -351,7 +351,7 @@ bool loadTerrainProgram()
                      BUFFER_GEOMETRY_INDEXES);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "cull.glsl"));
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain.glsl"));
     if (!djgp_to_gl(djp, 450, false, true, program)) {
