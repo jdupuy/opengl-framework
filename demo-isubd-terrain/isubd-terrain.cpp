@@ -683,7 +683,7 @@ bool loadGeometryBuffers()
  */
 void loadSubdBuffer(int id, size_t bufferCapacity)
 {
-    const uint data[] = {0, 1, 1, 1};
+    const uint32_t data[] = {0, 1, 1, 1};
 
     if (glIsBuffer(g_gl.buffers[id]))
         glDeleteBuffers(1, &g_gl.buffers[id]);
