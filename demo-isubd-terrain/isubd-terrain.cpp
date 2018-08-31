@@ -84,11 +84,11 @@ struct TerrainManager {
     float primitivePixelLengthTarget;
 } g_terrain = {
     {true, true, false, false, true},
-    {NULL, 0.2f},
+    {NULL, 0.3f},
     METHOD_TS,
-    4,
+    3,
     0,
-    8.f
+    10.f
 };
 
 // -----------------------------------------------------------------------------
