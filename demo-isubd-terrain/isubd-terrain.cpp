@@ -71,18 +71,21 @@ struct CameraManager {
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
+enum {METHOD_TS, METHOD_GS};
 struct TerrainManager {
     struct {bool displace, cull, freeze, wire, reset;} flags;
     struct {
         const char *pathToFile;
         float scale;
     } dmap;
+    int method;
     int gpuSubd;
     int pingPong;
     float primitivePixelLengthTarget;
 } g_terrain = {
     {true, true, false, false, true},
     {NULL, 0.2f},
+    METHOD_TS,
     4,
     0,
     8.f
@@ -356,7 +359,19 @@ bool loadTerrainProgram()
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain.glsl"));
+    if (g_terrain.method == METHOD_TS)
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain.glsl"));
+    else if (g_terrain.method == METHOD_GS) {
+        int edgeCnt = 1 << g_terrain.gpuSubd;
+        int vertexCnt = 0;
+
+        for (int i = 0; i < edgeCnt; ++i) {
+            vertexCnt+= 2 * i + 3;
+        }
+
+        djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
+    }
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
@@ -520,7 +535,7 @@ bool loadDmapTexture()
 
     LOG("Loading {Dmap-Texture}\n");
     glActiveTexture(GL_TEXTURE0 + TEXTURE_DMAP);
-    djgt_push_image_u16(djgt, "height_16.png", 1);
+    djgt_push_image_u16(djgt, "demo_hf.png", 1);
 
     if (!djgt_to_gl(djgt, GL_TEXTURE_2D, GL_R16, 1, 1, glt)) {
         LOG("=> Failure <=\n");
@@ -942,6 +957,51 @@ void release()
 ////////////////////////////////////////////////////////////////////////////////
 
 // -----------------------------------------------------------------------------
+void renderSceneTs(int offset) {
+    // render terrain
+    if (g_terrain.flags.reset) {
+        loadSubdivisionBuffers();
+        g_terrain.pingPong = 0;
+
+        glDrawArrays(GL_PATCHES, 0, 2);
+
+        g_terrain.flags.reset = false;
+    } else {
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_SUBD1,
+                         g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_SUBD2,
+                         g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
+        glDrawArraysIndirect(GL_PATCHES, BUFFER_OFFSET(offset));
+        g_terrain.pingPong = 1 - g_terrain.pingPong;
+    }
+}
+
+// -----------------------------------------------------------------------------
+void renderSceneGs(int offset) {
+    // render terrain
+    if (g_terrain.flags.reset) {
+        loadSubdivisionBuffers();
+        g_terrain.pingPong = 0;
+
+        glDrawArrays(GL_POINTS, 0, 2);
+
+        g_terrain.flags.reset = false;
+    } else {
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_SUBD1,
+                         g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_SUBD2,
+                         g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
+        glDrawArraysIndirect(GL_POINTS, BUFFER_OFFSET(offset));
+        g_terrain.pingPong = 1 - g_terrain.pingPong;
+    }
+}
+
 void renderScene()
 {
     static int offset = 0;
@@ -968,6 +1028,7 @@ void renderScene()
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
 
     // render terrain
+#if 0
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
         g_terrain.pingPong = 0;
@@ -984,9 +1045,14 @@ void renderScene()
                          BUFFER_SUBD2,
                          g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
         glDrawArraysIndirect(GL_PATCHES, BUFFER_OFFSET(offset));
-        //glDrawArrays(GL_PATCHES, 0, 2);
         g_terrain.pingPong = 1 - g_terrain.pingPong;
     }
+#else
+    if (g_terrain.method == METHOD_TS)
+        renderSceneTs(offset);
+    else if (g_terrain.method == METHOD_GS)
+        renderSceneGs(offset);
+#endif
     offset = nextOffset;
 
     // reset GL state
@@ -1095,12 +1161,23 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::SetNextWindowSize(ImVec2(510, 180)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Terrain");
         {
+            const char* eMethods[] = {
+                "Tessellation Shader",
+                "Geometry Shader"
+            };
             ImGui::Text("CPU_dt: %.3f %s",
                         cpuDt < 1. ? cpuDt * 1e3 : cpuDt,
                         cpuDt < 1. ? "ms" : " s");
+            ImGui::SameLine();
             ImGui::Text("GPU_dt: %.3f %s",
                         gpuDt < 1. ? gpuDt * 1e3 : gpuDt,
                         gpuDt < 1. ? "ms" : " s");
+            if (ImGui::Combo("Method", &g_terrain.method, eMethods, BUFFER_SIZE(eMethods))) {
+                loadTerrainProgram();
+                g_terrain.flags.reset = true;
+            }
+            ImGui::Text("flags: ");
+            ImGui::SameLine();
             if (ImGui::Checkbox("displace", &g_terrain.flags.displace))
                 loadTerrainProgram();
             ImGui::SameLine();
