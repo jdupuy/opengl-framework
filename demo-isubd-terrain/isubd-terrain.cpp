@@ -1028,31 +1028,11 @@ void renderScene()
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
 
     // render terrain
-#if 0
-    if (g_terrain.flags.reset) {
-        loadSubdivisionBuffers();
-        g_terrain.pingPong = 0;
-
-        glDrawArrays(GL_PATCHES, 0, 2);
-
-        g_terrain.flags.reset = false;
-    } else {
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-                         BUFFER_SUBD1,
-                         g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-                         BUFFER_SUBD2,
-                         g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
-        glDrawArraysIndirect(GL_PATCHES, BUFFER_OFFSET(offset));
-        g_terrain.pingPong = 1 - g_terrain.pingPong;
-    }
-#else
     if (g_terrain.method == METHOD_TS)
         renderSceneTs(offset);
     else if (g_terrain.method == METHOD_GS)
         renderSceneGs(offset);
-#endif
+
     offset = nextOffset;
 
     // reset GL state
