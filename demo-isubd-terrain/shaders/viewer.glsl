@@ -41,12 +41,14 @@ void main(void)
 
 #if MSAA_FACTOR
     for (int i = 0; i < MSAA_FACTOR; ++i) {
-        color+= texelFetch(u_FramebufferSampler, P, i);
+        vec4 c = texelFetch(u_FramebufferSampler, P, i);
+
+        color+= vec4(c.a * c.rgb, c.a);
     }
 #else
     color = texelFetch(u_FramebufferSampler, P, 0);
 #endif
-    if (color.a > 1.0) color.rgb/= color.a;
+    if (color.a > 0.0) color.rgb/= color.a;
 
     // make fragments store positive values
     if (any(lessThan(color.rgb, vec3(0)))) {
