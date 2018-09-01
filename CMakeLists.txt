@@ -45,6 +45,7 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(merl ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(merl glfw imgui)
+target_compile_definitions(merl PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
@@ -69,5 +70,10 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-terrain ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(isubd-terrain glfw imgui)
+target_compile_definitions(isubd-terrain PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
 unset(SRC_FILES)
 
+# ------------------------------------------------------------------------------
+# debug stuff
+message("CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
+message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")

@@ -109,7 +109,8 @@ void writeKey(uint primID, uint key)
     u_SubdBufferOut[idx] = uvec2(primID, key);
 }
 
-void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod) {
+void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
+{
     // extract subdivision level associated to the key
     int keyLod = findMSB(key);
 

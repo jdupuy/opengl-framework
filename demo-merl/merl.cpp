@@ -36,6 +36,11 @@
 #define VIEWER_DEFAULT_WIDTH  1280
 #define VIEWER_DEFAULT_HEIGHT 720
 
+// default path to the directory holding the source files
+#ifndef PATH_TO_SRC_DIRECTORY
+#   define PATH_TO_SRC_DIRECTORY "./"
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 //
@@ -106,7 +111,7 @@ struct SphereManager {
 	{
 		{NULL, 0, 0},
 		{NULL, 0, 0},
-		NULL,
+		PATH_TO_SRC_DIRECTORY "npf.bin",
 		SHADING_MC_MIS,
 		BRDF_MERL,
 		1.f
@@ -131,14 +136,17 @@ struct AppManager {
 	} recorder;
 	int frame, frameLimit;
 } g_app = {
-	/*dir*/    {"./shaders/", "./"},
-	/*viewer*/ {
+	/*dir*/     {
+                    PATH_TO_SRC_DIRECTORY "./shaders/",
+                    PATH_TO_SRC_DIRECTORY "./"
+                },
+	/*viewer*/  {
 	               VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT,
 	               true,
 	               2.2f, 2.0f
-	           },
-	/*record*/ {false, 0, 0},
-	/*frame*/  0, -1
+                },
+	/*record*/  {false, 0, 0},
+	/*frame*/   0, -1
 };
 
 // -----------------------------------------------------------------------------

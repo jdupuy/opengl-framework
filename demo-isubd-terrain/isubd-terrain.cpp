@@ -35,6 +35,11 @@
 #define VIEWER_DEFAULT_WIDTH  1680
 #define VIEWER_DEFAULT_HEIGHT 1050
 
+// default path to the directory holding the source files
+#ifndef PATH_TO_SRC_DIRECTORY
+#   define PATH_TO_SRC_DIRECTORY "./"
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 //
@@ -75,7 +80,7 @@ enum {METHOD_TS, METHOD_GS};
 struct TerrainManager {
     struct {bool displace, cull, freeze, wire, reset;} flags;
     struct {
-        const char *pathToFile;
+        std::string pathToFile;
         float scale;
     } dmap;
     int method;
@@ -83,8 +88,8 @@ struct TerrainManager {
     int pingPong;
     float primitivePixelLengthTarget;
 } g_terrain = {
-    {true, true, false, false, true},
-    {NULL, 0.3f},
+    {false, true, false, false, true},
+    {std::string(), 0.3f},
     METHOD_TS,
     3,
     0,
@@ -108,14 +113,17 @@ struct AppManager {
     } recorder;
     int frame, frameLimit;
 } g_app = {
-    /*dir*/    {"./shaders/", "./"},
-    /*viewer*/ {
+    /*dir*/     {
+                    PATH_TO_SRC_DIRECTORY "./shaders/",
+                    PATH_TO_SRC_DIRECTORY "./"
+                },
+    /*viewer*/  {
                    VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT,
                    true,
                    2.2f, 0.4f
-               },
-    /*record*/ {false, 0, 0},
-    /*frame*/  0, -1
+                },
+    /*record*/  {false, 0, 0},
+    /*frame*/   0, -1
 };
 
 // -----------------------------------------------------------------------------
@@ -303,10 +311,11 @@ bool loadViewerProgram()
     GLuint *program = &g_gl.programs[PROGRAM_VIEWER];
     char buf[1024];
 
-    LOG("Loading {Framebuffer-Blit-Program}\n");
+    LOG("Loading {Viewer-Program}\n");
     if (g_framebuffer.aa >= AA_MSAA2 && g_framebuffer.aa <= AA_MSAA16)
         djgp_push_string(djp, "#define MSAA_FACTOR %i\n", 1 << g_framebuffer.aa);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "viewer.glsl"));
+    LOG("loading: %s\n", strcat2(buf, g_app.dir.shader, "viewer.glsl"));
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
@@ -530,30 +539,32 @@ bool loadBackFramebufferTexture()
  */
 bool loadDmapTexture()
 {
-    djg_texture *djgt = djgt_create(1);
-    GLuint *glt = &g_gl.textures[TEXTURE_DMAP];
+    if (!g_terrain.dmap.pathToFile.empty()) {
+        djg_texture *djgt = djgt_create(1);
+        GLuint *glt = &g_gl.textures[TEXTURE_DMAP];
 
-    LOG("Loading {Dmap-Texture}\n");
-    glActiveTexture(GL_TEXTURE0 + TEXTURE_DMAP);
-    djgt_push_image_u16(djgt, "demo_hf.png", 1);
+        LOG("Loading {Dmap-Texture}\n");
+        glActiveTexture(GL_TEXTURE0 + TEXTURE_DMAP);
+        djgt_push_image_u16(djgt, "demo_hf.png", 1);
 
-    if (!djgt_to_gl(djgt, GL_TEXTURE_2D, GL_R16, 1, 1, glt)) {
-        LOG("=> Failure <=\n");
+        if (!djgt_to_gl(djgt, GL_TEXTURE_2D, GL_R16, 1, 1, glt)) {
+            LOG("=> Failure <=\n");
+            djgt_release(djgt);
+
+            return false;
+        }
+        glTexParameteri(GL_TEXTURE_2D,
+                        GL_TEXTURE_MIN_FILTER,
+                        GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,
+                        GL_TEXTURE_WRAP_S,
+                        GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,
+                        GL_TEXTURE_WRAP_T,
+                        GL_CLAMP_TO_EDGE);
+        glActiveTexture(GL_TEXTURE0);
         djgt_release(djgt);
-
-        return false;
     }
-    glTexParameteri(GL_TEXTURE_2D,
-                    GL_TEXTURE_MIN_FILTER,
-                    GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,
-                    GL_TEXTURE_WRAP_S,
-                    GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D,
-                    GL_TEXTURE_WRAP_T,
-                    GL_CLAMP_TO_EDGE);
-    glActiveTexture(GL_TEXTURE0);
-    djgt_release(djgt);
 
     return (glGetError() == GL_NO_ERROR);
 }
@@ -1391,7 +1402,6 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     LOG("-- End -- Demo\n");
-
 
     return 0;
 }
