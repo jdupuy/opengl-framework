@@ -26,11 +26,6 @@
 #define DJ_BRDF_IMPLEMENTATION 1
 #include "dj_brdf.h"
 
-#include "path.h"
-#include "resolver.h"
-namespace fs = filesystem;
-
-
 #define LOG(fmt, ...)  fprintf(stdout, fmt, ##__VA_ARGS__); fflush(stdout);
 
 ////////////////////////////////////////////////////////////////////////////////
