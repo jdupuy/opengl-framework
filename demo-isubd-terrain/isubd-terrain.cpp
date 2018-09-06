@@ -26,6 +26,11 @@
 #define DJ_BRDF_IMPLEMENTATION 1
 #include "dj_brdf.h"
 
+#include "path.h"
+#include "resolver.h"
+namespace fs = filesystem;
+
+
 #define LOG(fmt, ...)  fprintf(stdout, fmt, ##__VA_ARGS__); fflush(stdout);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1101,8 +1106,25 @@ void renderGui(double cpuDt, double gpuDt)
                 imguiSetAa();
             if (ImGui::Combo("MSAA", &g_framebuffer.msaa.fixed, "Fixed\0Random\0\0"))
                 imguiSetAa();
+            if (ImGui::Button("Screenshot")) {
+                static int cnt = 0;
+                char buf[1024];
+
+                snprintf(buf, 1024, "screenshot%03i", cnt);
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                djgt_save_glcolorbuffer_png(GL_FRONT, GL_RGBA, buf);
+                ++cnt;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Record"))
+                g_app.recorder.on = !g_app.recorder.on;
+            if (g_app.recorder.on) {
+                ImGui::SameLine();
+                ImGui::Text("Recording...");
+            }
         }
         ImGui::End();
+#if 0
         // Framebuffer Widgets
         ImGui::SetNextWindowPos(ImVec2(530, 10)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::SetNextWindowSize(ImVec2(250, 120)/*, ImGuiSetCond_FirstUseEver*/);
@@ -1112,23 +1134,9 @@ void renderGui(double cpuDt, double gpuDt)
                 configureViewerProgram();
             if (ImGui::SliderFloat("Gamma", &g_app.viewer.gamma, 1.0f, 4.0f))
                 configureViewerProgram();
-            if (ImGui::Button("Take Screenshot")) {
-                static int cnt = 0;
-                char buf[1024];
-
-                snprintf(buf, 1024, "screenshot%03i", cnt);
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                djgt_save_glcolorbuffer_png(GL_FRONT, GL_RGBA, buf);
-                ++cnt;
-            }
-            if (ImGui::Button("Record"))
-                g_app.recorder.on = !g_app.recorder.on;
-            if (g_app.recorder.on) {
-                ImGui::SameLine();
-                ImGui::Text("Recording...");
-            }
         }
         ImGui::End();
+#endif
         // Camera Widgets
         ImGui::SetNextWindowPos(ImVec2(10, 10)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::SetNextWindowSize(ImVec2(250, 120)/*, ImGuiSetCond_FirstUseEver*/);
@@ -1149,7 +1157,7 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::End();
         // Terrain Widgets
         ImGui::SetNextWindowPos(ImVec2(10, 140)/*, ImGuiSetCond_FirstUseEver*/);
-        ImGui::SetNextWindowSize(ImVec2(510, 180)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::SetNextWindowSize(ImVec2(510, 190)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Terrain");
         {
             const char* eMethods[] = {
@@ -1163,14 +1171,12 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::Text("GPU_dt: %.3f %s",
                         gpuDt < 1. ? gpuDt * 1e3 : gpuDt,
                         gpuDt < 1. ? "ms" : " s");
+            //if (ImGui::Button("Load Displacement Map"));
             if (ImGui::Combo("Method", &g_terrain.method, eMethods, BUFFER_SIZE(eMethods))) {
                 loadTerrainProgram();
                 g_terrain.flags.reset = true;
             }
             ImGui::Text("flags: ");
-            ImGui::SameLine();
-            if (ImGui::Checkbox("displace", &g_terrain.flags.displace))
-                loadTerrainProgram();
             ImGui::SameLine();
             if (ImGui::Checkbox("cull", &g_terrain.flags.cull))
                 loadTerrainProgram();
@@ -1179,6 +1185,11 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::SameLine();
             if (ImGui::Checkbox("freeze", &g_terrain.flags.freeze))
                 loadTerrainProgram();
+            if (!g_terrain.dmap.pathToFile.empty()) {
+                ImGui::SameLine();
+                if (ImGui::Checkbox("displace", &g_terrain.flags.displace))
+                    loadTerrainProgram();
+            }
             if (ImGui::SliderInt("PatchSubdLevel", &g_terrain.gpuSubd, 0, 6)) {
                 loadTerrainProgram();
                 g_terrain.flags.reset = true;
