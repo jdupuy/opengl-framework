@@ -48,8 +48,7 @@ mat4 bitToXform(in uint bit)
 // get xform from key
 void keyToXform(in uint key, out mat4 xfu, out mat4 xfv)
 {
-    xfu = mat4(1.0f);
-    xfv = mat4(1.0f);
+    xfu = xfv = mat4(1.0f);
 
     while (key > 1u) {
         xfu = bitToXform(key & 1u) * xfu;
@@ -75,17 +74,12 @@ void subd(in uint key, in vec4 v_in[16], out vec4 v_out[4])
                      v_in[1].z, v_in[5].z, v_in[ 9].z, v_in[13].z,
                      v_in[2].z, v_in[6].z, v_in[10].z, v_in[14].z,
                      v_in[3].z, v_in[7].z, v_in[11].z, v_in[15].z);
-    mat4 x_out = xfu * x_in;
-    mat4 y_out = xfu * y_in;
-    mat4 z_out = xfu * z_in;
-
-    x_out = xfv * transpose(x_out);
-    y_out = xfv * transpose(y_out);
-    z_out = xfv * transpose(z_out);
+    mat4 x_out = xfv * transpose(xfu * x_in);
+    mat4 y_out = xfv * transpose(xfu * y_in);
+    mat4 z_out = xfv * transpose(xfu * z_in);
 
     v_out[0] = vec4(x_out[1][1], y_out[1][1], z_out[1][1], 1);
     v_out[1] = vec4(x_out[1][2], y_out[1][2], z_out[1][2], 1);
     v_out[2] = vec4(x_out[2][2], y_out[2][2], z_out[2][2], 1);
     v_out[3] = vec4(x_out[2][1], y_out[2][1], z_out[2][1], 1);
 }
-
