@@ -105,7 +105,7 @@ struct PatchManager {
     },
     {false, false, false, true},
     METHOD_TS,
-    3,
+    0,
     0,
     10.f
 };
