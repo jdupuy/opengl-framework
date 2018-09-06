@@ -39,17 +39,11 @@ uniform float u_LodFactor;
 
 float distanceToLod(float z, float lodFactor)
 {
-    // Note that we multiply the result by two because the triangle's
-    // edge lengths decreases by half every two subdivision steps.
-    return -2.0 * log2(clamp(z * lodFactor / 2.0, 0.0f, 1.0f));
+    return -log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
 float computeLod(vec3 c)
 {
-#if FLAG_DISPLACE
-    c.z+= dmap(u_Transform.viewInv[3].xy);
-#endif
-
     vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
     float z = length(cxf);
 
@@ -146,13 +140,13 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec4 v[4], vp[4]; subd(key, v_in, v/*, vp*/);
+    vec4 v[4], vp[4]; subd(key, v_in, v, vp);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
-    targetLod = parentLod = findMSB(key);
+    targetLod = parentLod = findMSB(key) / 2;
 #endif
-    parentLod = targetLod = 4;
+    parentLod = targetLod = 9;
     updateSubdBuffer(primID, key, targetLod, parentLod);
 
 #if FLAG_CULL
@@ -160,12 +154,6 @@ void main()
     mat4 mvp = u_Transform.modelViewProjection;
     vec3 bmin = min(min(v[0], v[1]), v[2]).xyz;
     vec3 bmax = max(max(v[0], v[1]), v[2]).xyz;
-
-    // account for displacement in bound computations
-#   if FLAG_DISPLACE
-    bmin.z = 0;
-    bmax.z = u_DmapFactor;
-#   endif
 
     if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
 #else
@@ -183,13 +171,6 @@ void main()
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
         o_Patch[gl_InvocationID].key = key;
-
-#if 0
-        o_Patch[gl_InvocationID].vertices = vec4[4](vec4(0, 0, 0, 1),
-                                                    vec4(1, 0, 0, 1),
-                                                    vec4(1, 1, 0, 1),
-                                                    vec4(0, 1, 0, 1));
-#endif
     } else /* is not visible ? */ {
         // cull the geometry
         gl_TessLevelInner[0] =
