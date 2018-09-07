@@ -80,7 +80,7 @@ struct CameraManager {
 // Quadtree Manager
 enum {METHOD_TS, METHOD_GS};
 struct PatchManager {
-    dja::vec4 vertices[16];
+    dja::vec4 vertices[12];
     struct {bool uniform, cull, freeze, wire, reset, net;} flags;
     int method;
     int gpuSubd, uniformSubd;
@@ -88,22 +88,18 @@ struct PatchManager {
     float primitivePixelLengthTarget;
 } g_patch = {
     {
-        {0, 0, 0, 1},
-        {1, 0, 0, 1},
-        {2, 0, 0, 1},
-        {3, 0, 0, 1},
-        {0, 1, 0, 1},
-        {1, 1, 0, 1},
-        {2, 1, 1, 1},
-        {3, 1, 0, 1},
-        {0, 2, 0, 1},
-        {1, 2, 1, 1},
-        {2, 2, 1, 1},
-        {3, 2, 0, 1},
-        {0, 3, 0, 1},
-        {1, 3, 0, 1},
-        {2, 3, 0, 1},
-        {3, 3, 0, 1}
+        { 0, -1, 0, 1},
+        { 1, -1, 0, 1},
+        { 2, -1, 0, 1},
+        {-1,  0, 0, 1},
+        { 0,  0, 0, 1},
+        { 1,  0, 0, 1},
+        { 2,  0, 0, 1},
+        {-1,  1, 0, 1},
+        { 0,  1, 0, 1},
+        { 1,  1, 0, 1},
+        {-1,  2, 0, 1},
+        { 0,  2, 0, 1}
     },
     {true, false, false, true, true, true},
     METHOD_TS,
@@ -291,7 +287,7 @@ void configureViewerProgram()
 
 // -----------------------------------------------------------------------------
 // set terrain program uniforms
-void configureCatmullClarkProgram()
+void configureLoopProgram()
 {
     float lodFactor = 2.0f * tan(radians(g_camera.fovy) / 2.0f)
                     / g_framebuffer.w * (1 << g_patch.gpuSubd)
@@ -353,13 +349,13 @@ bool loadViewerProgram()
  * This program renders an adaptive terrain using the implicit subdivision
  * technique discribed in XXX.
  */
-bool loadCatmullClarkProgram()
+bool loadLoopProgram()
 {
     djg_program *djp = djgp_create();
     GLuint *program = &g_gl.programs[PROGRAM_CC];
     char buf[1024];
 
-    LOG("Loading {CC-Program}\n");
+    LOG("Loading {Loop-Program}\n");
     if (g_patch.flags.cull)
         djgp_push_string(djp, "#define FLAG_CULL 1\n");
     if (g_patch.flags.freeze)
@@ -376,9 +372,9 @@ bool loadCatmullClarkProgram()
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd_loop.glsl"));
     if (g_patch.method == METHOD_TS)
-        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "cc.glsl"));
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "loop.glsl"));
     else if (g_patch.method == METHOD_GS) {
         int edgeCnt = 1 << g_patch.gpuSubd;
         int vertexCnt = 0;
@@ -388,7 +384,7 @@ bool loadCatmullClarkProgram()
         }
 
         djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
-        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "cc_gs.glsl"));
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "loop_gs.glsl"));
     }
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
@@ -401,7 +397,7 @@ bool loadCatmullClarkProgram()
     g_gl.uniforms[UNIFORM_CC_LOD_FACTOR] =
         glGetUniformLocation(g_gl.programs[PROGRAM_CC], "u_LodFactor");
 
-    configureCatmullClarkProgram();
+    configureLoopProgram();
 
     return (glGetError() == GL_NO_ERROR);
 }
@@ -412,16 +408,16 @@ bool loadCatmullClarkProgram()
  *
  * This program renders the net of the CC patch using a geometry shader.
  */
-bool loadCatmullClarkNetProgram()
+bool loadLoopNetProgram()
 {
     djg_program *djp = djgp_create();
     GLuint *program = &g_gl.programs[PROGRAM_CCNET];
     char buf[1024];
 
-    LOG("Loading {CCNet-Program}\n");
+    LOG("Loading {Loop-Net-Program}\n");
     djgp_push_string(djp, "#define BUFFER_BINDING_PATCH %i\n", BUFFER_PATCH);
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "ccnet.glsl"));
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "loopnet.glsl"));
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
@@ -443,8 +439,8 @@ bool loadPrograms()
     bool v = true;
 
     if (v) v&= loadViewerProgram();
-    if (v) v&= loadCatmullClarkProgram();
-    if (v) v&= loadCatmullClarkNetProgram();
+    if (v) v&= loadLoopProgram();
+    if (v) v&= loadLoopNetProgram();
 
     return v;
 }
@@ -1024,7 +1020,7 @@ void renderScene()
     if (g_patch.flags.net) {
         glPointSize(10.f);
         glUseProgram(g_gl.programs[PROGRAM_CCNET]);
-        glDrawArrays(GL_POINTS, 0, 16);
+        glDrawArrays(GL_POINTS, 0, 12);
     }
 
     // reset GL state
@@ -1117,7 +1113,7 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::Begin("Camera");
         {
             if (ImGui::SliderFloat("FOVY", &g_camera.fovy, 1.0f, 179.0f)) {
-                configureCatmullClarkProgram();
+                configureLoopProgram();
             }
             if (ImGui::SliderFloat("zNear", &g_camera.zNear, 0.01f, 100.f)) {
                 if (g_camera.zNear >= g_camera.zFar)
@@ -1146,35 +1142,35 @@ void renderGui(double cpuDt, double gpuDt)
                         gpuDt < 1. ? gpuDt * 1e3 : gpuDt,
                         gpuDt < 1. ? "ms" : " s");
             if (ImGui::Combo("Method", &g_patch.method, eMethods, BUFFER_SIZE(eMethods))) {
-                loadCatmullClarkProgram();
+                loadLoopProgram();
                 g_patch.flags.reset = true;
             }
             ImGui::Text("flags: ");
             ImGui::SameLine();
             if (ImGui::Checkbox("uniform", &g_patch.flags.uniform))
-                loadCatmullClarkProgram();
+                loadLoopProgram();
             ImGui::SameLine();
             if (ImGui::Checkbox("cull", &g_patch.flags.cull))
-                loadCatmullClarkProgram();
+                loadLoopProgram();
             ImGui::SameLine();
             ImGui::Checkbox("wire", &g_patch.flags.wire);
             ImGui::SameLine();
             if (ImGui::Checkbox("freeze", &g_patch.flags.freeze))
-                loadCatmullClarkProgram();
+                loadLoopProgram();
             ImGui::SameLine();
             ImGui::Checkbox("net", &g_patch.flags.net);
 
             if (ImGui::SliderInt("PatchSubdLevel", &g_patch.gpuSubd, 0, 6)) {
-                loadCatmullClarkProgram();
+                loadLoopProgram();
                 g_patch.flags.reset = true;
             }
             if (g_patch.flags.uniform) {
                 if (ImGui::SliderInt("SubdLevel", &g_patch.uniformSubd, 0, 15)) {
-                    loadCatmullClarkProgram();
+                    loadLoopProgram();
                 }
             } else {
                 if (ImGui::SliderFloat("ScreenRes", &g_patch.primitivePixelLengthTarget, 1, 64)) {
-                    configureCatmullClarkProgram();
+                    configureLoopProgram();
                 }
             }
             ImGui::Text("control patch vertices:");

@@ -1,6 +1,6 @@
 #line 1
 ////////////////////////////////////////////////////////////////////////////////
-// Implicit Subdivition Sahder for Terrain Rendering
+// Implicit Subdivition Sahder for Terrain Rendering (using a geometry shader)
 //
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
@@ -59,6 +59,30 @@ float distanceToLod(float z, float lodFactor)
     return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
+
+// -----------------------------------------------------------------------------
+/**
+ * Vertex Shader
+ *
+ * The vertex shader is empty
+ */
+#ifdef VERTEX_SHADER
+void main(void)
+{ }
+#endif
+
+// -----------------------------------------------------------------------------
+/**
+ * Geometry Shader
+ *
+ * This geometry shader is responsible for updating the
+ * subdivision buffer and sending visible geometry to the rasterizer.
+ */
+#ifdef GEOMETRY_SHADER
+layout(points) in;
+layout(triangle_strip, max_vertices = VERTICES_OUT) out;
+layout(location = 0) out vec2 o_TexCoord;
+
 float computeLod(vec3 c)
 {
 #if FLAG_DISPLACE
@@ -76,31 +100,6 @@ float computeLod(in vec3 v[3])
     vec3 c = (v[1] + v[2]) / 2.0;
     return computeLod(c);
 }
-
-// -----------------------------------------------------------------------------
-/**
- * Vertex Shader
- *
- * The vertex shader is empty
- */
-#ifdef VERTEX_SHADER
-void main()
-{ }
-#endif
-
-// -----------------------------------------------------------------------------
-/**
- * Tessellation Control Shader
- *
- * This tessellaction control shader is responsible for updating the
- * subdivision buffer and sending visible geometry to the rasterizer.
- */
-#ifdef TESS_CONTROL_SHADER
-layout (vertices = 1) out;
-out Patch {
-    vec3 vertices[3];
-    flat uint key;
-} o_Patch[];
 
 void writeKey(uint primID, uint key)
 {
@@ -120,7 +119,7 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 
         writeKey(primID, children[0]);
         writeKey(primID, children[1]);
-    } else if (/* keep ? */ keyLod < (parentLod + 1)) {
+    } else if (/* keep ? */ keyLod <= (parentLod + 1)) {
         writeKey(primID, key);
     } else /* merge ? */ {
         if (/* is root ? */isRootKey(key)) {
@@ -134,7 +133,7 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 void main()
 {
     // get threadID (each key is associated to a thread)
-    int threadID = gl_PrimitiveID;
+    int threadID = gl_PrimitiveIDIn;
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
@@ -171,54 +170,31 @@ void main()
     if (true) {
 #endif // FLAG_CULL
         // set tess levels
-        int tessLevel = PATCH_TESS_LEVEL;
-        gl_TessLevelInner[0] =
-        gl_TessLevelInner[1] =
-        gl_TessLevelOuter[0] =
-        gl_TessLevelOuter[1] =
-        gl_TessLevelOuter[2] = tessLevel;
+        int edgeCnt = PATCH_TESS_LEVEL;
+        float edgeLength = 1.0 / float(edgeCnt);
 
-        // set output data
-        o_Patch[gl_InvocationID].vertices = v;
-        o_Patch[gl_InvocationID].key = key;
-    } else /* is not visible ? */ {
-        // cull the geometry
-        gl_TessLevelInner[0] =
-        gl_TessLevelInner[1] =
-        gl_TessLevelOuter[0] =
-        gl_TessLevelOuter[1] =
-        gl_TessLevelOuter[2] = 0;
-    }
-}
-#endif
+        for (int i = 0; i < edgeCnt; ++i) {
+            int vertexCnt = 2 * i + 3;
 
-// -----------------------------------------------------------------------------
-/**
- * Tessellation Evaluation Shader
- *
- * This tessellaction evaluation shader is responsible for placing the
- * geometry properly on the input mesh (here a terrain).
- */
-#ifdef TESS_EVALUATION_SHADER
-layout (triangles, ccw, equal_spacing) in;
-in Patch {
-    vec3 vertices[3];
-    flat uint key;
-} i_Patch[];
-
-layout(location = 0) out vec2 o_TexCoord;
-
-void main()
-{
-    vec3 v[3] = i_Patch[0].vertices;
-    vec3 finalVertex = berp(v, gl_TessCoord.xy);
+            // start a strip
+            for (int j = 0; j < vertexCnt; ++j) {
+                int ui = j >> 1;
+                int vi = (edgeCnt - 1) - (i - (j & 1));
+                vec2 tessCoord = vec2(ui, vi) * edgeLength;
+                vec3 finalVertex = berp(v, tessCoord);
 
 #if FLAG_DISPLACE
-    finalVertex.z+= dmap(finalVertex.xy);
+                finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
-    o_TexCoord = finalVertex.xy;
-    gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
+                o_TexCoord = finalVertex.xy;
+                gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
+                EmitVertex();
+            }
+            EndPrimitive();
+        }
+    }
+
 }
 #endif
 

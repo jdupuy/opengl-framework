@@ -5,75 +5,54 @@
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
 readonly buffer SubdBufferIn {
-	uvec2 u_SubdBufferIn[];
+    uvec2 u_SubdBufferIn[];
 };
 
 layout (std430, binding = BUFFER_BINDING_SUBD2)
 buffer SubdBufferOut {
-	uvec2 u_SubdBufferOut[];
+    uvec2 u_SubdBufferOut[];
 };
 
-layout (std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
+layout (std430, binding = BUFFER_BINDING_PATCH)
 readonly buffer VertexBuffer {
-	vec4 u_VertexBuffer[];
-};
-
-layout (std430, binding = BUFFER_BINDING_GEOMETRY_INDEXES)
-readonly buffer IndexBuffer {
-	uint u_IndexBuffer[];
+    vec4 u_VertexBuffer[];
 };
 
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
 struct Transform {
-	mat4 modelView;
-	mat4 projection;
-	mat4 modelViewProjection;
-	mat4 viewInv;
+    mat4 modelView;
+    mat4 projection;
+    mat4 modelViewProjection;
+    mat4 viewInv;
 };
 
 layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
 uniform Transforms {
-	Transform u_Transform;
+    Transform u_Transform;
 };
 
 uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
 
-// displacement map
-float dmap(vec2 pos)
-{
-#if 0
-    return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
-#else
-    return (texture(u_DmapSampler, pos * 0.5 + 0.5).x) * u_DmapFactor;
-#endif
-}
-
 float distanceToLod(float z, float lodFactor)
 {
-    // Note that we multiply the result by two because the triangle's
-    // edge lengths decreases by half every two subdivision steps.
-    return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
+    return -log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
 float computeLod(vec3 c)
 {
-#if FLAG_DISPLACE
-    c.z+= dmap(u_Transform.viewInv[3].xy);
-#endif
-
     vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
     float z = length(cxf);
 
     return distanceToLod(z, u_LodFactor);
 }
 
-float computeLod(in vec3 v[3])
+float computeLod(in vec4 v[4])
 {
-    vec3 c = (v[1] + v[2]) / 2.0;
+    vec3 c = (v[0].xyz + v[1].xyz + v[2].xyz + v[3].xyz) / 4.0;
     return computeLod(c);
 }
 
@@ -98,7 +77,7 @@ void main()
 #ifdef TESS_CONTROL_SHADER
 layout (vertices = 1) out;
 out Patch {
-    vec3 vertices[3];
+    vec4 vertices[4];
     flat uint key;
 } o_Patch[];
 
@@ -112,14 +91,16 @@ void writeKey(uint primID, uint key)
 void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 {
     // extract subdivision level associated to the key
-    int keyLod = findMSB(key);
+    int keyLod = findMSB(key) / 2;
 
     // update the key accordingly
     if (/* subdivide ? */ keyLod < targetLod && !isLeafKey(key)) {
-        uint children[2]; childrenKeys(key, children);
+        uint children[4]; childrenKeys(key, children);
 
         writeKey(primID, children[0]);
         writeKey(primID, children[1]);
+        writeKey(primID, children[2]);
+        writeKey(primID, children[3]);
     } else if (/* keep ? */ keyLod < (parentLod + 1)) {
         writeKey(primID, key);
     } else /* merge ? */ {
@@ -138,33 +119,39 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
-    vec3 v_in[3] = vec3[3](
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3    ]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]].xyz)
+    vec4 v_in[12] = vec4[12](
+        u_VertexBuffer[0],
+        u_VertexBuffer[1],
+        u_VertexBuffer[2],
+        u_VertexBuffer[3],
+        u_VertexBuffer[4],
+        u_VertexBuffer[5],
+        u_VertexBuffer[6],
+        u_VertexBuffer[7],
+        u_VertexBuffer[8],
+        u_VertexBuffer[9],
+        u_VertexBuffer[10],
+        u_VertexBuffer[11]
     );
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec3 v[3], vp[3]; subd(key, v_in, v, vp);
+    vec4 v[4], vp[4]; subd(key, v_in, v, vp);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
-    targetLod = parentLod = findMSB(key);
+    parentLod = targetLod = findMSB(key) / 2;
+#endif
+#if FLAG_UNIFORM
+    parentLod = targetLod = UNIFORM_SUBD_FACTOR;
 #endif
     updateSubdBuffer(primID, key, targetLod, parentLod);
 
 #if FLAG_CULL
     // Cull invisible nodes
     mat4 mvp = u_Transform.modelViewProjection;
-    vec3 bmin = min(min(v[0], v[1]), v[2]);
-    vec3 bmax = max(max(v[0], v[1]), v[2]);
-
-    // account for displacement in bound computations
-#   if FLAG_DISPLACE
-    bmin.z = 0;
-    bmax.z = u_DmapFactor;
-#   endif
+    vec3 bmin = min(min(v[0], v[1]), v[2]).xyz;
+    vec3 bmax = max(max(v[0], v[1]), v[2]).xyz;
 
     if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
 #else
@@ -176,7 +163,8 @@ void main()
         gl_TessLevelInner[1] =
         gl_TessLevelOuter[0] =
         gl_TessLevelOuter[1] =
-        gl_TessLevelOuter[2] = tessLevel;
+        gl_TessLevelOuter[2] =
+        gl_TessLevelOuter[3] = tessLevel;
 
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
@@ -187,7 +175,8 @@ void main()
         gl_TessLevelInner[1] =
         gl_TessLevelOuter[0] =
         gl_TessLevelOuter[1] =
-        gl_TessLevelOuter[2] = 0;
+        gl_TessLevelOuter[2] =
+        gl_TessLevelOuter[3] = 0;
     }
 }
 #endif
@@ -202,23 +191,30 @@ void main()
 #ifdef TESS_EVALUATION_SHADER
 layout (triangles, ccw, equal_spacing) in;
 in Patch {
-    vec3 vertices[3];
+    vec4 vertices[3];
     flat uint key;
 } i_Patch[];
 
 layout(location = 0) out vec2 o_TexCoord;
 
+// barycentric interpolation
+vec3 berp(in vec3 v[3], in vec2 u)
+{
+    return v[0] + u.x * (v[1] - v[0]) + u.y * (v[2] - v[0]);
+}
+
+
 void main()
 {
-    vec3 v[3] = i_Patch[0].vertices;
-    vec3 finalVertex = berp(v, gl_TessCoord.xy);
+    vec4 v[3] = i_Patch[0].vertices;
+    vec4 finalVertex = berp(v, gl_TessCoord.xy);
 
 #if FLAG_DISPLACE
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
     o_TexCoord = finalVertex.xy;
-    gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
+    gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
 
@@ -234,9 +230,7 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    float z = dmap(i_TexCoord);
-    o_FragColor = vec4(i_TexCoord, 0, 1);
-    o_FragColor.rgb = vec3(z*z);
+    o_FragColor = vec4(0, 0, 0, 1);
 }
 
 #endif
