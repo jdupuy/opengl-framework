@@ -60,28 +60,30 @@ struct FramebufferManager {
 
 // -----------------------------------------------------------------------------
 // Camera Manager
+#define INIT_POS dja::vec3(0, 0, 1)
 struct CameraManager {
     float fovy, zNear, zFar; // perspective settings
     dja::vec3 pos;           // 3D position
     dja::mat3 axis;          // 3D frame
 } g_camera = {
     55.f, 0.001f, 1024.f,
-    dja::vec3(1.5, 0, 0.4),
-    dja::mat3(
-        0.971769, -0.129628, -0.197135,
-        0.127271, 0.991562, -0.024635,
-        0.198665, -0.001150, 0.980067
+    INIT_POS,
+    dja::mat3::lookat(
+        dja::vec3(1.5f, 1.5f, 0),
+        INIT_POS,
+        dja::vec3(0, 0, 1)
     )
 };
+#undef INIT_POS
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
 enum {METHOD_TS, METHOD_GS};
 struct PatchManager {
     dja::vec4 vertices[16];
-    struct {bool cull, freeze, wire, reset;} flags;
+    struct {bool uniform, cull, freeze, wire, reset, net;} flags;
     int method;
-    int gpuSubd;
+    int gpuSubd, uniformSubd;
     int pingPong;
     float primitivePixelLengthTarget;
 } g_patch = {
@@ -91,21 +93,21 @@ struct PatchManager {
         {2, 0, 0, 1},
         {3, 0, 0, 1},
         {0, 1, 0, 1},
-        {1, 1, 0, 1},
-        {2, 1, 0, 1},
+        {1, 1, 1, 1},
+        {2, 1, 1, 1},
         {3, 1, 0, 1},
         {0, 2, 0, 1},
-        {1, 2, 0, 1},
-        {2, 2, 0, 1},
+        {1, 2, 1, 1},
+        {2, 2, 1, 1},
         {3, 2, 0, 1},
         {0, 3, 0, 1},
         {1, 3, 0, 1},
         {2, 3, 0, 1},
-        {10, 10, 10, 1}
+        {3, 3, 0, 1}
     },
-    {false, false, false, true},
+    {true, false, false, true, true, true},
     METHOD_TS,
-    0,
+    0, 5,
     0,
     10.f
 };
@@ -167,6 +169,7 @@ enum {
 enum {
     PROGRAM_VIEWER,
     PROGRAM_CC,
+    PROGRAM_CCNET,
     PROGRAM_COUNT
 };
 enum {
@@ -361,6 +364,10 @@ bool loadCatmullClarkProgram()
         djgp_push_string(djp, "#define FLAG_CULL 1\n");
     if (g_patch.flags.freeze)
         djgp_push_string(djp, "#define FLAG_FREEZE 1\n");
+    if (g_patch.flags.uniform) {
+        djgp_push_string(djp, "#define FLAG_UNIFORM 1\n");
+        djgp_push_string(djp, "#define UNIFORM_SUBD_FACTOR %i\n", g_patch.uniformSubd);
+    }
 
     djgp_push_string(djp, "#define BUFFER_BINDING_PATCH %i\n", BUFFER_PATCH);
     djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_patch.gpuSubd);
@@ -401,6 +408,33 @@ bool loadCatmullClarkProgram()
 
 // -----------------------------------------------------------------------------
 /**
+ * Load the Catmull Clark Net Program
+ *
+ * This program renders the net of the CC patch using a geometry shader.
+ */
+bool loadCatmullClarkNetProgram()
+{
+    djg_program *djp = djgp_create();
+    GLuint *program = &g_gl.programs[PROGRAM_CCNET];
+    char buf[1024];
+
+    LOG("Loading {CCNet-Program}\n");
+    djgp_push_string(djp, "#define BUFFER_BINDING_PATCH %i\n", BUFFER_PATCH);
+    djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "ccnet.glsl"));
+    if (!djgp_to_gl(djp, 450, false, true, program)) {
+        LOG("=> Failure <=\n");
+        djgp_release(djp);
+
+        return false;
+    }
+    djgp_release(djp);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+// -----------------------------------------------------------------------------
+/**
  * Load All Programs
  *
  */
@@ -410,6 +444,7 @@ bool loadPrograms()
 
     if (v) v&= loadViewerProgram();
     if (v) v&= loadCatmullClarkProgram();
+    if (v) v&= loadCatmullClarkNetProgram();
 
     return v;
 }
@@ -984,6 +1019,15 @@ void renderScene()
     // reset GL state
     if (g_patch.flags.wire)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    // render the CC net
+    if (g_patch.flags.net) {
+        glPointSize(10.f);
+        glUseProgram(g_gl.programs[PROGRAM_CCNET]);
+        glDrawArrays(GL_POINTS, 0, 16);
+    }
+
+    // reset GL state
     glDisable(GL_DEPTH_TEST);
 }
 
@@ -1036,8 +1080,25 @@ void renderGui(double cpuDt, double gpuDt)
                 imguiSetAa();
             if (ImGui::Combo("MSAA", &g_framebuffer.msaa.fixed, "Fixed\0Random\0\0"))
                 imguiSetAa();
+            if (ImGui::Button("Screenshot")) {
+                static int cnt = 0;
+                char buf[1024];
+
+                snprintf(buf, 1024, "screenshot%03i", cnt);
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                djgt_save_glcolorbuffer_png(GL_FRONT, GL_RGBA, buf);
+                ++cnt;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Record"))
+                g_app.recorder.on = !g_app.recorder.on;
+            if (g_app.recorder.on) {
+                ImGui::SameLine();
+                ImGui::Text("Recording...");
+            }
         }
         ImGui::End();
+#if 0
         // Framebuffer Widgets
         ImGui::SetNextWindowPos(ImVec2(530, 10)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::SetNextWindowSize(ImVec2(250, 120)/*, ImGuiSetCond_FirstUseEver*/);
@@ -1047,23 +1108,9 @@ void renderGui(double cpuDt, double gpuDt)
                 configureViewerProgram();
             if (ImGui::SliderFloat("Gamma", &g_app.viewer.gamma, 1.0f, 4.0f))
                 configureViewerProgram();
-            if (ImGui::Button("Take Screenshot")) {
-                static int cnt = 0;
-                char buf[1024];
-
-                snprintf(buf, 1024, "screenshot%03i", cnt);
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                djgt_save_glcolorbuffer_png(GL_FRONT, GL_RGBA, buf);
-                ++cnt;
-            }
-            if (ImGui::Button("Record"))
-                g_app.recorder.on = !g_app.recorder.on;
-            if (g_app.recorder.on) {
-                ImGui::SameLine();
-                ImGui::Text("Recording...");
-            }
         }
         ImGui::End();
+#endif
         // Camera Widgets
         ImGui::SetNextWindowPos(ImVec2(10, 10)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::SetNextWindowSize(ImVec2(250, 120)/*, ImGuiSetCond_FirstUseEver*/);
@@ -1082,10 +1129,10 @@ void renderGui(double cpuDt, double gpuDt)
             }
         }
         ImGui::End();
-        // Terrain Widgets
+        // Subd Patch Widgets
         ImGui::SetNextWindowPos(ImVec2(10, 140)/*, ImGuiSetCond_FirstUseEver*/);
-        ImGui::SetNextWindowSize(ImVec2(510, 180)/*, ImGuiSetCond_FirstUseEver*/);
-        ImGui::Begin("Terrain");
+        ImGui::SetNextWindowSize(ImVec2(510, 580)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::Begin("Patch");
         {
             const char* eMethods[] = {
                 "Tessellation Shader",
@@ -1104,6 +1151,9 @@ void renderGui(double cpuDt, double gpuDt)
             }
             ImGui::Text("flags: ");
             ImGui::SameLine();
+            if (ImGui::Checkbox("uniform", &g_patch.flags.uniform))
+                loadCatmullClarkProgram();
+            ImGui::SameLine();
             if (ImGui::Checkbox("cull", &g_patch.flags.cull))
                 loadCatmullClarkProgram();
             ImGui::SameLine();
@@ -1111,12 +1161,30 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::SameLine();
             if (ImGui::Checkbox("freeze", &g_patch.flags.freeze))
                 loadCatmullClarkProgram();
+            ImGui::SameLine();
+            ImGui::Checkbox("net", &g_patch.flags.net);
+
             if (ImGui::SliderInt("PatchSubdLevel", &g_patch.gpuSubd, 0, 6)) {
                 loadCatmullClarkProgram();
                 g_patch.flags.reset = true;
             }
-            if (ImGui::SliderFloat("ScreenRes", &g_patch.primitivePixelLengthTarget, 1, 64)) {
-                configureCatmullClarkProgram();
+            if (g_patch.flags.uniform) {
+                if (ImGui::SliderInt("SubdLevel", &g_patch.uniformSubd, 0, 15)) {
+                    loadCatmullClarkProgram();
+                }
+            } else {
+                if (ImGui::SliderFloat("ScreenRes", &g_patch.primitivePixelLengthTarget, 1, 64)) {
+                    configureCatmullClarkProgram();
+                }
+            }
+            ImGui::Text("control patch vertices:");
+            for (int i = 0; i < BUFFER_SIZE(g_patch.vertices); ++i) {
+                char name[64];
+
+                sprintf(name, "v%02i", i);
+                if (ImGui::SliderFloat3(name, &(g_patch.vertices[i].x), -4.0f, 4.0f)) {
+                    loadPatchBuffer();
+                }
             }
         }
         ImGui::End();

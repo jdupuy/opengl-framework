@@ -5,32 +5,32 @@
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
 readonly buffer SubdBufferIn {
-	uvec2 u_SubdBufferIn[];
+    uvec2 u_SubdBufferIn[];
 };
 
 layout (std430, binding = BUFFER_BINDING_SUBD2)
 buffer SubdBufferOut {
-	uvec2 u_SubdBufferOut[];
+    uvec2 u_SubdBufferOut[];
 };
 
 layout (std430, binding = BUFFER_BINDING_PATCH)
 readonly buffer VertexBuffer {
-	vec4 u_VertexBuffer[];
+    vec4 u_VertexBuffer[];
 };
 
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
 struct Transform {
-	mat4 modelView;
-	mat4 projection;
-	mat4 modelViewProjection;
-	mat4 viewInv;
+    mat4 modelView;
+    mat4 projection;
+    mat4 modelViewProjection;
+    mat4 viewInv;
 };
 
 layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
 uniform Transforms {
-	Transform u_Transform;
+    Transform u_Transform;
 };
 
 uniform sampler2D u_DmapSampler;
@@ -101,7 +101,7 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
         writeKey(primID, children[1]);
         writeKey(primID, children[2]);
         writeKey(primID, children[3]);
-    } else if (/* keep ? */ keyLod <= (parentLod + 1)) {
+    } else if (/* keep ? */ keyLod < (parentLod + 1)) {
         writeKey(primID, key);
     } else /* merge ? */ {
         if (/* is root ? */isRootKey(key)) {
@@ -144,9 +144,11 @@ void main()
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
-    targetLod = parentLod = findMSB(key) / 2;
+    parentLod = targetLod = findMSB(key) / 2;
 #endif
-    parentLod = targetLod = 9;
+#if FLAG_UNIFORM
+    parentLod = targetLod = UNIFORM_SUBD_FACTOR;
+#endif
     updateSubdBuffer(primID, key, targetLod, parentLod);
 
 #if FLAG_CULL
