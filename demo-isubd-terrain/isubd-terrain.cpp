@@ -76,7 +76,7 @@ struct CameraManager {
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
-enum {METHOD_TS, METHOD_GS};
+enum {METHOD_TS, METHOD_GS, METHOD_CS};
 struct TerrainManager {
     struct {bool displace, cull, freeze, wire, reset;} flags;
     struct {
@@ -130,9 +130,15 @@ struct AppManager {
 // OpenGL Manager
 enum { CLOCK_SPF, CLOCK_COUNT };
 enum { FRAMEBUFFER_BACK, FRAMEBUFFER_SCENE, FRAMEBUFFER_COUNT };
-enum { STREAM_TRANSFORM, STREAM_SUBD_COUNTER, STREAM_COUNT };
+enum {
+    STREAM_TRANSFORM,
+    STREAM_SUBD_COUNTER,
+    STREAM_SUBD_CULLED_COUNTER, // compute-based pipeline only
+    STREAM_COUNT
+};
 enum {
     VERTEXARRAY_EMPTY,
+    VERTEXARRAY_INSTANCED_GRID, // compute-based pipeline only
     VERTEXARRAY_COUNT
 };
 enum {
@@ -145,12 +151,16 @@ enum {
 enum {
     BUFFER_GEOMETRY_VERTICES = STREAM_COUNT,
     BUFFER_GEOMETRY_INDEXES,
-    BUFFER_SUBD1,
-    BUFFER_SUBD2,
+    BUFFER_SUBD1, BUFFER_SUBD2,
+    BUFFER_CULLED_SUBD,          // compute-based pipeline only
+    BUFFER_INSTANCED_VERTICES,   // compute-based pipeline only
+    BUFFER_INSTANCED_INDEXES,    // compute-based pipeline only
     BUFFER_COUNT
 };
 enum {
     PROGRAM_VIEWER,
+    PROGRAM_SUBD_CS_LOD,      // compute-base pipeline only
+    PROGRAM_SUBD_CS_INDIRECT, // compute-base pipeline only
     PROGRAM_TERRAIN,
     PROGRAM_COUNT
 };
@@ -159,6 +169,10 @@ enum {
     UNIFORM_VIEWER_EXPOSURE,
     UNIFORM_VIEWER_GAMMA,
     UNIFORM_VIEWER_VIEWPORT,
+
+    UNIFORM_SUBD_CS_LOD_DMAP_SAMPLER,   // compute-based pipeline only
+    UNIFORM_SUBD_CS_LOD_DMAP_FACTOR,    // compute-based pipeline only
+    UNIFORM_SUBD_CS_LOD_LOD_FACTOR,     // compute-based pipeline only
 
     UNIFORM_TERRAIN_DMAP_SAMPLER,
     UNIFORM_TERRAIN_DMAP_FACTOR,
@@ -292,6 +306,23 @@ void configureTerrainProgram()
                        lodFactor);
 }
 
+void configureSubdCsLodProgram()
+{
+    float lodFactor = 2.0f * tan(radians(g_camera.fovy) / 2.0f)
+                    / g_framebuffer.w * (1 << g_terrain.gpuSubd)
+                    * g_terrain.primitivePixelLengthTarget;
+
+    glProgramUniform1i(g_gl.programs[PROGRAM_SUBD_CS_LOD],
+                       g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_SAMPLER],
+                       TEXTURE_DMAP);
+    glProgramUniform1f(g_gl.programs[PROGRAM_SUBD_CS_LOD],
+                       g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_FACTOR],
+                       g_terrain.dmap.scale);
+    glProgramUniform1f(g_gl.programs[PROGRAM_SUBD_CS_LOD],
+                       g_gl.uniforms[UNIFORM_SUBD_CS_LOD_LOD_FACTOR],
+                       lodFactor);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Program Loading
 //
@@ -343,13 +374,10 @@ bool loadViewerProgram()
  * This program renders an adaptive terrain using the implicit subdivision
  * technique discribed in XXX.
  */
-bool loadTerrainProgram()
+void setupSubdKernel(djg_program *djp)
 {
-    djg_program *djp = djgp_create();
-    GLuint *program = &g_gl.programs[PROGRAM_TERRAIN];
     char buf[1024];
 
-    LOG("Loading {Terrain-Program}\n");
     if (g_terrain.flags.displace)
         djgp_push_string(djp, "#define FLAG_DISPLACE 1\n");
     if (g_terrain.flags.cull)
@@ -368,6 +396,17 @@ bool loadTerrainProgram()
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
+}
+
+bool loadTerrainProgram()
+{
+    djg_program *djp = djgp_create();
+    GLuint *program = &g_gl.programs[PROGRAM_TERRAIN];
+    char buf[1024];
+
+    LOG("Loading {Terrain-Program}\n");
+    setupSubdKernel(djp);
+
     if (g_terrain.method == METHOD_TS)
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain.glsl"));
     else if (g_terrain.method == METHOD_GS) {
@@ -381,6 +420,7 @@ bool loadTerrainProgram()
         djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
     }
+
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
@@ -401,6 +441,43 @@ bool loadTerrainProgram()
     return (glGetError() == GL_NO_ERROR);
 }
 
+bool loadSubdCsLodProgram()
+{
+    djg_program *djp = djgp_create();
+    GLuint *program = &g_gl.programs[PROGRAM_SUBD_CS_LOD];
+    char buf[1024];
+
+    LOG("Loading {Compute-LoD-Program}\n");
+    setupSubdKernel(djp);
+
+    djgp_push_string(djp,
+                     "#define BUFFER_BINDING_CULLED_SUBD %i\n",
+                     BUFFER_CULLED_SUBD);
+    djgp_push_string(djp,
+                     "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n",
+                     STREAM_SUBD_CULLED_COUNTER);
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
+
+    if (!djgp_to_gl(djp, 450, false, true, program)) {
+        LOG("=> Failure <=\n");
+        djgp_release(djp);
+
+        return false;
+    }
+    djgp_release(djp);
+
+    g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_FACTOR] =
+        glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_DmapFactor");
+    g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_SAMPLER] =
+        glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_DmapSampler");
+    g_gl.uniforms[UNIFORM_SUBD_CS_LOD_LOD_FACTOR] =
+        glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_LodFactor");
+
+    configureSubdCsLodProgram();
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
 // -----------------------------------------------------------------------------
 /**
  * Load All Programs
@@ -412,6 +489,7 @@ bool loadPrograms()
 
     if (v) v&= loadViewerProgram();
     if (v) v&= loadTerrainProgram();
+    if (v) v&= loadSubdCsLodProgram();
 
     return v;
 }
@@ -969,6 +1047,10 @@ void release()
 
 // -----------------------------------------------------------------------------
 void renderSceneTs(int offset) {
+    glPatchParameteri(GL_PATCH_VERTICES, 1);
+    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+
     // render terrain
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
@@ -992,6 +1074,9 @@ void renderSceneTs(int offset) {
 
 // -----------------------------------------------------------------------------
 void renderSceneGs(int offset) {
+    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+
     // render terrain
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
@@ -1013,6 +1098,7 @@ void renderSceneGs(int offset) {
     }
 }
 
+// -----------------------------------------------------------------------------
 void renderScene()
 {
     static int offset = 0;
@@ -1023,7 +1109,6 @@ void renderScene()
     glViewport(0, 0, g_framebuffer.w, g_framebuffer.h);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    glPatchParameteri(GL_PATCH_VERTICES, 1);
     if (g_terrain.flags.wire)
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -1035,8 +1120,6 @@ void renderScene()
     djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
     loadSubdCounterBuffer(&nextOffset);
     loadTransformBuffer();
-    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
-    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
 
     // render terrain
     if (g_terrain.method == METHOD_TS)
