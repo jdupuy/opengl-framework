@@ -152,9 +152,9 @@ enum {
     BUFFER_GEOMETRY_VERTICES = STREAM_COUNT,
     BUFFER_GEOMETRY_INDEXES,
     BUFFER_SUBD1, BUFFER_SUBD2,
-    BUFFER_CULLED_SUBD,          // compute-based pipeline only
-    BUFFER_INSTANCED_VERTICES,   // compute-based pipeline only
-    BUFFER_INSTANCED_INDEXES,    // compute-based pipeline only
+    BUFFER_CULLED_SUBD,                 // compute-based pipeline only
+    BUFFER_INSTANCED_GEOMETRY_VERTICES, // compute-based pipeline only
+    BUFFER_INSTANCED_GEOMETRY_INDEXES,  // compute-based pipeline only
     BUFFER_COUNT
 };
 enum {
@@ -765,6 +765,74 @@ bool loadGeometryBuffers()
 
 // -----------------------------------------------------------------------------
 /**
+ * Load the Instanced Geometry Buffer
+ *
+ * This procedure loads the geometry of a subdivided triangle into an
+ * index and vertex buffer. Note that this buffer is only relevant
+ * for the compute-shader based pipline.
+ */
+bool loadInstancedGeometryBuffers()
+{
+    int sliceCnt = (1 << g_terrain.gpuSubd) + 1;     // side vertices;
+    int vertexCnt = (sliceCnt * (sliceCnt + 1)) / 2;
+    int indexCnt = 3 << (g_terrain.gpuSubd * 2);
+    std::vector<dja::vec2> vertices(vertexCnt);
+    std::vector<uint32_t> indexes(indexCnt);
+
+    LOG("Loading {Instanced-Vertex-Buffer}\n");
+    for (int i = 0; i < sliceCnt; ++i)
+    for (int j = 0; j < i + 1; ++j) {
+        int idx = i * (i + 1) / 2 + j;
+        float u = (float)j / (sliceCnt - 1);
+        float v = 1.f - (float)i / (sliceCnt - 1);
+
+        vertices[idx] = dja::vec2(u, v);
+    }
+    if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]))
+        glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glBindBuffer(GL_ARRAY_BUFFER,
+                 g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glBufferData(GL_ARRAY_BUFFER,
+                 sizeof(vertices[0]) * vertexCnt,
+                 (const void*)&vertices[0],
+                 GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    LOG("Loading {Instanced-Index-Buffer}\n");
+    for (int i = 0; i < sliceCnt - 1; ++i) {
+        uint32_t *index = &indexes[3 * i * i];
+
+        for (int j = 0; j < i; ++j) {
+            index[0] = (i + 1) * (i + 2) / 2 + j;
+            index[1] = (i + 1) * (i + 2) / 2 + j + 1;
+            index[2] =  i      * (i + 1) / 2 + j;
+            index[3] = index[2];
+            index[4] = index[1];
+            index[5] = index[2] + 1;
+            index+= 6;
+        }
+
+        index[0] = (i + 1) * (i + 2) / 2 + i;
+        index[1] = (i + 2) * (i + 3) / 2 - 1;
+        index[2] = (i + 1) * (i + 2) / 2 - 1;
+    }
+    if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]))
+        glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+    glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+                 g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                 sizeof(indexes[0]) * indexCnt,
+                 (const void *)&indexes[0],
+                 GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+// -----------------------------------------------------------------------------
+/**
  * Load the Subdivision Buffers
  *
  * This procedure allocates and initialises the subdivision buffers.
@@ -836,6 +904,7 @@ bool loadBuffers()
 
     if (v) v&= loadTransformBuffer();
     if (v) v&= loadGeometryBuffers();
+    if (v) v&= loadInstancedGeometryBuffers();
     if (v) v&= loadSubdivisionBuffers();
     if (v) v&= loadSubdCounterBuffer();
 
