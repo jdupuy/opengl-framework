@@ -74,6 +74,15 @@ target_compile_definitions(isubd-terrain PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
+set(SRC_DIR demo-isubd-bs)
+include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
+aux_source_directory(${SRC_DIR} SRC_FILES)
+add_executable(isubd-bs ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
+target_link_libraries(isubd-bs glfw imgui)
+target_compile_definitions(isubd-bs PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+unset(SRC_FILES)
+
+# ------------------------------------------------------------------------------
 set(SRC_DIR demo-isubd-cc)
 include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
