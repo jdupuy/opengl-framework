@@ -74,7 +74,7 @@ struct PatchManager {
         {+0.50f, -0.5f, 0, 1}
     },
     {true, false, true, true},
-    0, 5,
+    0, 2,
     0,
     10.f
 };
@@ -955,7 +955,7 @@ void renderGui(double cpuDt, double gpuDt)
         // ImGui
         ImGui_ImplGlfwGL3_NewFrame();
         // Viewer Widgets
-        ImGui::SetNextWindowPos(ImVec2(270, 10)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::SetNextWindowPos(ImVec2(400, 10)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::SetNextWindowSize(ImVec2(250, 120)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Framebuffer");
         {
@@ -1002,8 +1002,8 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::End();
 #endif
         // Subd Patch Widgets
-        ImGui::SetNextWindowPos(ImVec2(10, 140)/*, ImGuiSetCond_FirstUseEver*/);
-        ImGui::SetNextWindowSize(ImVec2(510, 240)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::SetNextWindowPos(ImVec2(10, 10)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::SetNextWindowSize(ImVec2(380, 120)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Patch");
         {
             ImGui::Text("CPU_dt: %.3f %s",
@@ -1036,6 +1036,7 @@ void renderGui(double cpuDt, double gpuDt)
                     configureBasisSplineProgram();
                 }
             }
+#if 0
             ImGui::Text("control patch vertices:");
             for (int i = 0; i < BUFFER_SIZE(g_patch.vertices); ++i) {
                 char name[64];
@@ -1045,6 +1046,7 @@ void renderGui(double cpuDt, double gpuDt)
                     loadPatchBuffer();
                 }
             }
+#endif
         }
         ImGui::End();
 

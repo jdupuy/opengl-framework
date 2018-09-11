@@ -180,7 +180,7 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    vec3 myColor = vec3(1.0, 0.50, 0.00);
+    vec3 myColor = vec3(0.10,0.50,0.10);
     o_FragColor = vec4(myColor, 1);
 }
 
