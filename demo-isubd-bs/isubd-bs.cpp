@@ -55,7 +55,7 @@ struct FramebufferManager {
 } g_framebuffer = {
     VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT, AA_MSAA2,
     {false},
-    {61./255., 119./255., 192./225}
+    {220./255., 220./255., 220./255}
 };
 
 // -----------------------------------------------------------------------------
@@ -89,7 +89,6 @@ struct AppManager {
     struct {
         int w, h;
         bool hud;
-        float gamma, exposure;
     } viewer;
     struct {
         int on, frame, capture;
@@ -102,8 +101,7 @@ struct AppManager {
                 },
     /*viewer*/  {
                    VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT,
-                   true,
-                   2.2f, 0.4f
+                   true
                 },
     /*record*/  {false, 0, 0},
     /*frame*/   0, -1
@@ -136,14 +134,12 @@ enum {
 enum {
     PROGRAM_VIEWER,
     PROGRAM_BS,
-    PROGRAM_BSNET,
+    PROGRAM_BSNET_EDGES,
+    PROGRAM_BSNET_VERTICES,
     PROGRAM_COUNT
 };
 enum {
     UNIFORM_VIEWER_FRAMEBUFFER_SAMPLER,
-    UNIFORM_VIEWER_EXPOSURE,
-    UNIFORM_VIEWER_GAMMA,
-    UNIFORM_VIEWER_VIEWPORT,
 
     UNIFORM_BS_LOD_FACTOR,
 
@@ -248,12 +244,6 @@ void configureViewerProgram()
     glProgramUniform1i(g_gl.programs[PROGRAM_VIEWER],
                        g_gl.uniforms[UNIFORM_VIEWER_FRAMEBUFFER_SAMPLER],
                        TEXTURE_SCENE);
-    glProgramUniform1f(g_gl.programs[PROGRAM_VIEWER],
-                       g_gl.uniforms[UNIFORM_VIEWER_EXPOSURE],
-                       g_app.viewer.exposure);
-    glProgramUniform1f(g_gl.programs[PROGRAM_VIEWER],
-                       g_gl.uniforms[UNIFORM_VIEWER_GAMMA],
-                       g_app.viewer.gamma);
 }
 
 // -----------------------------------------------------------------------------
@@ -297,10 +287,6 @@ bool loadViewerProgram()
 
     g_gl.uniforms[UNIFORM_VIEWER_FRAMEBUFFER_SAMPLER] =
         glGetUniformLocation(g_gl.programs[PROGRAM_VIEWER], "u_FramebufferSampler");
-    g_gl.uniforms[UNIFORM_VIEWER_EXPOSURE] =
-        glGetUniformLocation(g_gl.programs[PROGRAM_VIEWER], "u_Exposure");
-    g_gl.uniforms[UNIFORM_VIEWER_GAMMA] =
-        glGetUniformLocation(g_gl.programs[PROGRAM_VIEWER], "u_Gamma");
 
     configureViewerProgram();
 
@@ -358,15 +344,39 @@ bool loadBasisSplineProgram()
  *
  * This program renders the net of the BS patch using a geometry shader.
  */
-bool loadBasisSplineNetProgram()
+bool loadBasisSplineNetVerticesProgram()
 {
     djg_program *djp = djgp_create();
-    GLuint *program = &g_gl.programs[PROGRAM_BSNET];
+    GLuint *program = &g_gl.programs[PROGRAM_BSNET_VERTICES];
     char buf[1024];
 
     LOG("Loading {BSNet-Program}\n");
+    djgp_push_string(djp, "#define SCREEN_XRES %i\n", VIEWER_DEFAULT_WIDTH);
+    djgp_push_string(djp, "#define SCREEN_YRES %i\n", VIEWER_DEFAULT_HEIGHT);
     djgp_push_string(djp, "#define BUFFER_BINDING_PATCH %i\n", BUFFER_PATCH);
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "bsnet.glsl"));
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "bsnet_vertices.glsl"));
+    if (!djgp_to_gl(djp, 450, false, true, program)) {
+        LOG("=> Failure <=\n");
+        djgp_release(djp);
+
+        return false;
+    }
+    djgp_release(djp);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+bool loadBasisSplineNetEdgesProgram()
+{
+    djg_program *djp = djgp_create();
+    GLuint *program = &g_gl.programs[PROGRAM_BSNET_EDGES];
+    char buf[1024];
+
+    LOG("Loading {BSNet-Program}\n");
+    djgp_push_string(djp, "#define SCREEN_XRES %i\n", VIEWER_DEFAULT_WIDTH);
+    djgp_push_string(djp, "#define SCREEN_YRES %i\n", VIEWER_DEFAULT_HEIGHT);
+    djgp_push_string(djp, "#define BUFFER_BINDING_PATCH %i\n", BUFFER_PATCH);
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "bsnet_edges.glsl"));
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
@@ -389,7 +399,8 @@ bool loadPrograms()
 
     if (v) v&= loadViewerProgram();
     if (v) v&= loadBasisSplineProgram();
-    if (v) v&= loadBasisSplineNetProgram();
+    if (v) v&= loadBasisSplineNetEdgesProgram();
+    if (v) v&= loadBasisSplineNetVerticesProgram();
 
     return v;
 }
@@ -875,7 +886,9 @@ void renderScene()
     glPatchParameteri(GL_PATCH_VERTICES, 1);
 
     // clear framebuffer
-    glClearColor(0.5, 0.5, 0.5, 1.0);
+    glClearColor(g_framebuffer.clearColor.r,
+                 g_framebuffer.clearColor.g,
+                 g_framebuffer.clearColor.b, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // bind buffers
@@ -891,9 +904,16 @@ void renderScene()
 
     // render the BS net
     if (g_patch.flags.net) {
-        glPointSize(10.f);
-        glUseProgram(g_gl.programs[PROGRAM_BSNET]);
+        glUseProgram(g_gl.programs[PROGRAM_BSNET_EDGES]);
         glDrawArrays(GL_POINTS, 0, BUFFER_SIZE(g_patch.vertices));
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        glUseProgram(g_gl.programs[PROGRAM_BSNET_VERTICES]);
+        glDrawArrays(GL_POINTS, 0, BUFFER_SIZE(g_patch.vertices));
+
+        glDisable(GL_BLEND);
     }
 
     // reset GL state

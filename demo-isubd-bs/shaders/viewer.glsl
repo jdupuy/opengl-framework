@@ -1,6 +1,3 @@
-uniform float u_Exposure;
-uniform float u_Gamma;
-
 #if MSAA_FACTOR
 uniform sampler2DMS u_FramebufferSampler;
 #else
@@ -56,20 +53,8 @@ void main(void)
         return;
     }
 
-    // exposure
-    color.rgb*= exp2(u_Exposure);
-
-    // gamma
-    color.rgb = pow(color.rgb, vec3(1.0 / u_Gamma));
-
     // final color
     o_FragColor = vec4(color.rgb, 1.0);
-
-    // make sure the fragments store real values
-    if (any(isnan(color.rgb)))
-        o_FragColor = vec4(1, 0, 0, 1);
-
-    //o_FragColor = vec4(i_TexCoord, 0, 1);
 }
 #endif
 
