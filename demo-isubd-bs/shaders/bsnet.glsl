@@ -41,7 +41,7 @@ void main()
     }
     EndPrimitive();
 
-    if (vertexID < 4) {
+    if (vertexID < 3) {
         float lineScale = 1.0 / 200.0;
         vec4 nextVertexPos = u_VertexBuffer[(vertexID + 1) % 4];
         vec2 dir = normalize(nextVertexPos.xy - vertexPos.xy);

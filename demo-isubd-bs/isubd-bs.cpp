@@ -62,18 +62,18 @@ struct FramebufferManager {
 // Quadtree Manager
 struct PatchManager {
     dja::vec4 vertices[4];
-    struct {bool uniform, cull, freeze, wire, reset, net;} flags;
+    struct {bool uniform, freeze, reset, net;} flags;
     int gpuSubd, uniformSubd;
     int pingPong;
     float primitivePixelLengthTarget;
 } g_patch = {
     {
-        { 0.5f,  0.5f, 0, 1},
-        {-0.5f,  0.5f, 0, 1},
-        {-0.5f, -0.5f, 0, 1},
-        { 0.5f, -0.5f, 0, 1}
+        {-0.50f, -0.5f, 0, 1},
+        {-0.25f,  0.5f, 0, 1},
+        {+0.25f, +0.5f, 0, 1},
+        {+0.50f, -0.5f, 0, 1}
     },
-    {true, false, false, true, true, true},
+    {true, false, true, true},
     0, 5,
     0,
     10.f
@@ -260,7 +260,7 @@ void configureViewerProgram()
 // set terrain program uniforms
 void configureBasisSplineProgram()
 {
-
+    // TODO
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -316,14 +316,11 @@ bool loadViewerProgram()
  */
 bool loadBasisSplineProgram()
 {
-#if 0
     djg_program *djp = djgp_create();
     GLuint *program = &g_gl.programs[PROGRAM_BS];
     char buf[1024];
 
     LOG("Loading {BS-Program}\n");
-    if (g_patch.flags.cull)
-        djgp_push_string(djp, "#define FLAG_CULL 1\n");
     if (g_patch.flags.freeze)
         djgp_push_string(djp, "#define FLAG_FREEZE 1\n");
     if (g_patch.flags.uniform) {
@@ -351,7 +348,7 @@ bool loadBasisSplineProgram()
         glGetUniformLocation(g_gl.programs[PROGRAM_BS], "u_LodFactor");
 
     configureBasisSplineProgram();
-#endif
+
     return (glGetError() == GL_NO_ERROR);
 }
 
@@ -870,13 +867,12 @@ void renderScene()
     int nextOffset = 0;
 
     // configure GL state
+    glLineWidth(5.f);
     glBindFramebuffer(GL_FRAMEBUFFER, g_gl.framebuffers[FRAMEBUFFER_SCENE]);
     glViewport(0, 0, g_framebuffer.w, g_framebuffer.h);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glPatchParameteri(GL_PATCH_VERTICES, 1);
-    if (g_patch.flags.wire)
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // clear framebuffer
     glClearColor(0.5, 0.5, 0.5, 1.0);
@@ -889,15 +885,9 @@ void renderScene()
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
 
     // render spline
-#if 0
     renderSceneTs(offset);
-#endif
 
     offset = nextOffset;
-
-    // reset GL state
-    if (g_patch.flags.wire)
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
     // render the BS net
     if (g_patch.flags.net) {
@@ -907,6 +897,7 @@ void renderScene()
     }
 
     // reset GL state
+    glLineWidth(1.f);
     glDisable(GL_DEPTH_TEST);
 }
 
@@ -1007,11 +998,6 @@ void renderGui(double cpuDt, double gpuDt)
             if (ImGui::Checkbox("uniform", &g_patch.flags.uniform))
                 loadBasisSplineProgram();
             ImGui::SameLine();
-            if (ImGui::Checkbox("cull", &g_patch.flags.cull))
-                loadBasisSplineProgram();
-            ImGui::SameLine();
-            ImGui::Checkbox("wire", &g_patch.flags.wire);
-            ImGui::SameLine();
             if (ImGui::Checkbox("freeze", &g_patch.flags.freeze))
                 loadBasisSplineProgram();
             ImGui::SameLine();
@@ -1035,7 +1021,7 @@ void renderGui(double cpuDt, double gpuDt)
                 char name[64];
 
                 sprintf(name, "v%02i", i);
-                if (ImGui::SliderFloat3(name, &(g_patch.vertices[i].x), -4.0f, 4.0f)) {
+                if (ImGui::SliderFloat2(name, &(g_patch.vertices[i].x), -4.0f, 4.0f)) {
                     loadPatchBuffer();
                 }
             }

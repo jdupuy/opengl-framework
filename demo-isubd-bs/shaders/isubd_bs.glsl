@@ -46,86 +46,64 @@ mat4 bitToXform(in uint bit)
 }
 
 // get xform from key
-void keyToXform(in uint key, out mat4 xfu, out mat4 xfv)
+mat4 keyToXform(in uint key)
 {
-    xfu = xfv = mat4(1.0f);
+    mat4 xf = mat4(1.0f);
 
     while (key > 1u) {
-        xfu = bitToXform(key & 1u) * xfu;
-        key = key >> 1u;
-        xfv = bitToXform(key & 1u) * xfv;
+        xf = bitToXform(key & 1u) * xf;
         key = key >> 1u;
     }
+
+    return xf;
 }
 
 // get xform from key
-void
-keyToXform(
-    in uint key,
-    out mat4 xfu, out mat4 xfv,
-    out mat4 xfup, out mat4 xfvp
-) {
-    keyToXform(parentKey(key), xfup, xfvp);
-    keyToXform(key, xfu, xfv);
+mat4 keyToXform(in uint key, out mat4 xfp)
+{
+    xfp = keyToXform(parentKey(key));
+    return keyToXform(key);
 }
 
 // subdivision routine (vertex position only)
 void subd(in uint key, in vec4 v_in[16], out vec4 v_out[4])
 {
-    mat4 xfu, xfv; keyToXform(key, xfu, xfv);
-    mat4 x_in = mat4(v_in[0].x, v_in[4].x, v_in[ 8].x, v_in[12].x,
-                     v_in[1].x, v_in[5].x, v_in[ 9].x, v_in[13].x,
-                     v_in[2].x, v_in[6].x, v_in[10].x, v_in[14].x,
-                     v_in[3].x, v_in[7].x, v_in[11].x, v_in[15].x);
-    mat4 y_in = mat4(v_in[0].y, v_in[4].y, v_in[ 8].y, v_in[12].y,
-                     v_in[1].y, v_in[5].y, v_in[ 9].y, v_in[13].y,
-                     v_in[2].y, v_in[6].y, v_in[10].y, v_in[14].y,
-                     v_in[3].y, v_in[7].y, v_in[11].y, v_in[15].y);
-    mat4 z_in = mat4(v_in[0].z, v_in[4].z, v_in[ 8].z, v_in[12].z,
-                     v_in[1].z, v_in[5].z, v_in[ 9].z, v_in[13].z,
-                     v_in[2].z, v_in[6].z, v_in[10].z, v_in[14].z,
-                     v_in[3].z, v_in[7].z, v_in[11].z, v_in[15].z);
-    mat4 x_out = xfv * transpose(xfu * x_in);
-    mat4 y_out = xfv * transpose(xfu * y_in);
-    mat4 z_out = xfv * transpose(xfu * z_in);
+    mat4 xf = keyToXform(key);
+    vec4 x_in = vec4(v_in[0].x, v_in[1].x, v_in[2].x, v_in[3].x);
+    vec4 y_in = vec4(v_in[0].y, v_in[1].y, v_in[2].y, v_in[3].y);
+    vec4 z_in = vec4(v_in[0].z, v_in[1].z, v_in[2].z, v_in[3].z);
+    vec4 x_out = xf * x_in;
+    vec4 y_out = xf * y_in;
+    vec4 z_out = xf * z_in;
 
-    v_out[0] = vec4(x_out[1][1], y_out[1][1], z_out[1][1], 1);
-    v_out[1] = vec4(x_out[1][2], y_out[1][2], z_out[1][2], 1);
-    v_out[2] = vec4(x_out[2][2], y_out[2][2], z_out[2][2], 1);
-    v_out[3] = vec4(x_out[2][1], y_out[2][1], z_out[2][1], 1);
+    v_out[0] = vec4(x_out[0], y_out[0], z_out[0], 1);
+    v_out[1] = vec4(x_out[1], y_out[1], z_out[1], 1);
+    v_out[2] = vec4(x_out[2], y_out[2], z_out[2], 1);
+    v_out[3] = vec4(x_out[3], y_out[3], z_out[3], 1);
 }
 
 // subdivision routine (vertex position only) with parents
 void
-subd(in uint key, in vec4 v_in[16], out vec4 v_out[4], out vec4 v_out_p[4])
+subd(in uint key, in vec4 v_in[4], out vec4 v_out[4], out vec4 v_out_p[4])
 {
-    mat4 xfu, xfv, xfup, xfvp; keyToXform(key, xfu, xfv, xfup, xfvp);
-    mat4 x_in = mat4(v_in[0].x, v_in[4].x, v_in[ 8].x, v_in[12].x,
-                     v_in[1].x, v_in[5].x, v_in[ 9].x, v_in[13].x,
-                     v_in[2].x, v_in[6].x, v_in[10].x, v_in[14].x,
-                     v_in[3].x, v_in[7].x, v_in[11].x, v_in[15].x);
-    mat4 y_in = mat4(v_in[0].y, v_in[4].y, v_in[ 8].y, v_in[12].y,
-                     v_in[1].y, v_in[5].y, v_in[ 9].y, v_in[13].y,
-                     v_in[2].y, v_in[6].y, v_in[10].y, v_in[14].y,
-                     v_in[3].y, v_in[7].y, v_in[11].y, v_in[15].y);
-    mat4 z_in = mat4(v_in[0].z, v_in[4].z, v_in[ 8].z, v_in[12].z,
-                     v_in[1].z, v_in[5].z, v_in[ 9].z, v_in[13].z,
-                     v_in[2].z, v_in[6].z, v_in[10].z, v_in[14].z,
-                     v_in[3].z, v_in[7].z, v_in[11].z, v_in[15].z);
-    mat4 x_out = xfv * transpose(xfu * x_in);
-    mat4 y_out = xfv * transpose(xfu * y_in);
-    mat4 z_out = xfv * transpose(xfu * z_in);
-    mat4 x_out_p = xfvp * transpose(xfup * x_in);
-    mat4 y_out_p = xfvp * transpose(xfup * y_in);
-    mat4 z_out_p = xfvp * transpose(xfup * z_in);
+    mat4 xfp; mat4 xf = keyToXform(key, xfp);
+    vec4 x_in = vec4(v_in[0].x, v_in[1].x, v_in[2].x, v_in[3].x);
+    vec4 y_in = vec4(v_in[0].y, v_in[1].y, v_in[2].y, v_in[3].y);
+    vec4 z_in = vec4(v_in[0].z, v_in[1].z, v_in[2].z, v_in[3].z);
+    vec4 x_out = xf * x_in;
+    vec4 y_out = xf * y_in;
+    vec4 z_out = xf * z_in;
+    vec4 x_out_p = xfp * x_in;
+    vec4 y_out_p = xfp * y_in;
+    vec4 z_out_p = xfp * z_in;
 
-    v_out[0] = vec4(x_out[1][1], y_out[1][1], z_out[1][1], 1);
-    v_out[1] = vec4(x_out[1][2], y_out[1][2], z_out[1][2], 1);
-    v_out[2] = vec4(x_out[2][2], y_out[2][2], z_out[2][2], 1);
-    v_out[3] = vec4(x_out[2][1], y_out[2][1], z_out[2][1], 1);
+    v_out[0] = vec4(x_out[0], y_out[0], z_out[0], 1);
+    v_out[1] = vec4(x_out[1], y_out[1], z_out[1], 1);
+    v_out[2] = vec4(x_out[2], y_out[2], z_out[2], 1);
+    v_out[3] = vec4(x_out[3], y_out[3], z_out[3], 1);
 
-    v_out_p[0] = vec4(x_out_p[1][1], y_out_p[1][1], z_out_p[1][1], 1);
-    v_out_p[1] = vec4(x_out_p[1][2], y_out_p[1][2], z_out_p[1][2], 1);
-    v_out_p[2] = vec4(x_out_p[2][2], y_out_p[2][2], z_out_p[2][2], 1);
-    v_out_p[3] = vec4(x_out_p[2][1], y_out_p[2][1], z_out_p[2][1], 1);
+    v_out_p[0] = vec4(x_out_p[0], y_out_p[0], z_out_p[0], 1);
+    v_out_p[1] = vec4(x_out_p[1], y_out_p[1], z_out_p[1], 1);
+    v_out_p[2] = vec4(x_out_p[2], y_out_p[2], z_out_p[2], 1);
+    v_out_p[3] = vec4(x_out_p[3], y_out_p[3], z_out_p[3], 1);
 }

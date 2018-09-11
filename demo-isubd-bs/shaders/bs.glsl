@@ -21,6 +21,7 @@ readonly buffer VertexBuffer {
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
+uniform float u_LodFactor = 1.0;
 
 float distanceToLod(float z, float lodFactor)
 {
@@ -29,7 +30,7 @@ float distanceToLod(float z, float lodFactor)
 
 float computeLod(vec3 c)
 {
-    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
+    vec3 cxf = c.xyz;
     float z = length(cxf);
 
     return distanceToLod(z, u_LodFactor);
@@ -104,7 +105,7 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
-    vec2 v_in[4] = vec4[4](
+    vec4 v_in[4] = vec4[4](
         u_VertexBuffer[0],
         u_VertexBuffer[1],
         u_VertexBuffer[2],
@@ -124,16 +125,7 @@ void main()
 #endif
     updateSubdBuffer(primID, key, targetLod, parentLod);
 
-#if FLAG_CULL
-    // Cull invisible nodes
-    mat4 mvp = u_Transform.modelViewProjection;
-    vec3 bmin = min(min(v[0], v[1]), v[2]).xyz;
-    vec3 bmax = max(max(v[0], v[1]), v[2]).xyz;
-
-    if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
-#else
     if (true) {
-#endif // FLAG_CULL
         // set tess levels
         int tessLevel = PATCH_TESS_LEVEL;
         gl_TessLevelInner[0] =
@@ -146,14 +138,6 @@ void main()
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
         o_Patch[gl_InvocationID].key = key;
-    } else /* is not visible ? */ {
-        // cull the geometry
-        gl_TessLevelInner[0] =
-        gl_TessLevelInner[1] =
-        gl_TessLevelOuter[0] =
-        gl_TessLevelOuter[1] =
-        gl_TessLevelOuter[2] =
-        gl_TessLevelOuter[3] = 0;
     }
 }
 #endif
@@ -166,7 +150,7 @@ void main()
  * geometry properly on the input mesh (here a terrain).
  */
 #ifdef TESS_EVALUATION_SHADER
-layout (quads, ccw, equal_spacing) in;
+layout (isolines, equal_spacing) in;
 in Patch {
     vec4 vertices[4];
     flat uint key;
@@ -174,22 +158,13 @@ in Patch {
 
 layout(location = 0) out vec2 o_TexCoord;
 
-vec4 berp(in vec4 v_in[4], vec2 u)
-{
-    return mix(mix(v_in[0], v_in[1], u.x), mix(v_in[3], v_in[2], u.x), u.y);
-}
-
 void main()
 {
     vec4 v[4] = i_Patch[0].vertices;
-    vec4 finalVertex = berp(v, gl_TessCoord.xy);
+    vec4 finalVertex = mix(v[1], v[2], gl_TessCoord.x);
 
-#if FLAG_DISPLACE
-    finalVertex.z+= dmap(finalVertex.xy);
-#endif
-
-    o_TexCoord = finalVertex.xy;
-    gl_Position = u_Transform.modelViewProjection * finalVertex;
+    o_TexCoord = gl_TessCoord.xy;
+    gl_Position = finalVertex;
 }
 #endif
 
@@ -205,7 +180,7 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    o_FragColor = vec4(0, 0, 0, 1);
+    o_FragColor = vec4(i_TexCoord, 0, 1);
 }
 
 #endif
