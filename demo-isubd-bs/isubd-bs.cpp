@@ -1116,8 +1116,7 @@ void render()
 int vertexTest(float x, float y)
 {
     dja::vec2 res = dja::vec2(VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT);
-    dja::vec2 ndc = 2.0f * dja::vec2(x, y) / res - dja::vec2(1.0f);
-
+    dja::vec2 ndc = 2.0f * dja::vec2(x, VIEWER_DEFAULT_HEIGHT - y) / res - dja::vec2(1.0f);
     int idx = -1;
 
     for (int i = 0; i < BUFFER_SIZE(g_patch.vertices) && idx == -1; ++i) {
@@ -1125,7 +1124,7 @@ int vertexTest(float x, float y)
         dja::vec2 p2 = dja::vec2(p4.x, p4.y);
         float nrm = dja::norm(p2 - ndc);
 
-        if (nrm < res.x / 32.f)
+        if (nrm < 32.f / res.x)
             idx = i;
     }
 
@@ -1162,8 +1161,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantCaptureMouse)
         return;
-
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
 }
 
 void mouseMotionCallback(GLFWwindow* window, double x, double y)
@@ -1176,8 +1173,18 @@ void mouseMotionCallback(GLFWwindow* window, double x, double y)
     if (io.WantCaptureMouse)
         return;
 
-    printf("%i\n", vertexTest(x, y));
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        int i = vertexTest(x, y);
+
+        if (i != -1) {
+            dja::vec2 res = dja::vec2(VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT);
+            dja::vec2 ndc = 2.0f * dja::vec2(x, VIEWER_DEFAULT_HEIGHT - y) / res - dja::vec2(1.0f);
+
+            g_patch.vertices[i].x = ndc.x;
+            g_patch.vertices[i].y = ndc.y;
+
+            loadPatchBuffer();
+        }
 
     } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
 
