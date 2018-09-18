@@ -32,7 +32,7 @@ layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
 layout (binding = BUFFER_BINDING_CULLED_SUBD_COUNTER)
-uniform atomic_uint u_CulledSubdBufferCounter;
+uniform atomic_uint u_CulledSubdBufferCounter[];
 
 struct Transform {
     mat4 modelView;
@@ -167,7 +167,7 @@ void main()
     if (true) {
 #endif // FLAG_CULL
         // write key
-        uint idx = atomicCounterIncrement(u_CulledSubdBufferCounter);
+        uint idx = atomicCounterIncrement(u_CulledSubdBufferCounter[1]);
 
         u_CulledSubdBuffer[idx] = uvec2(primID, key);
     }

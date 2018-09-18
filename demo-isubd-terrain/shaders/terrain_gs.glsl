@@ -119,7 +119,7 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 
         writeKey(primID, children[0]);
         writeKey(primID, children[1]);
-    } else if (/* keep ? */ keyLod <= (parentLod + 1)) {
+    } else if (/* keep ? */ keyLod < (parentLod + 1)) {
         writeKey(primID, key);
     } else /* merge ? */ {
         if (/* is root ? */isRootKey(key)) {

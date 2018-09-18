@@ -133,7 +133,7 @@ enum { FRAMEBUFFER_BACK, FRAMEBUFFER_SCENE, FRAMEBUFFER_COUNT };
 enum {
     STREAM_TRANSFORM,
     STREAM_SUBD_COUNTER,
-    STREAM_SUBD_CULLED_COUNTER, // compute-based pipeline only
+    STREAM_CULLED_SUBD_COUNTER, // compute-based pipeline only
     STREAM_COUNT
 };
 enum {
@@ -454,8 +454,11 @@ bool loadSubdCsLodProgram()
                      "#define BUFFER_BINDING_CULLED_SUBD %i\n",
                      BUFFER_CULLED_SUBD);
     djgp_push_string(djp,
+                     "#define BUFFER_BINDING_SUBD_COUNTER %i\n",
+                     STREAM_SUBD_COUNTER);
+    djgp_push_string(djp,
                      "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n",
-                     STREAM_SUBD_CULLED_COUNTER);
+                     STREAM_CULLED_SUBD_COUNTER);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
 
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -873,22 +876,78 @@ bool loadSubdivisionBuffers()
 bool loadSubdCounterBuffer(int *bufferOffset = NULL)
 {
     static bool first = true;
-    struct DrawArraysIndirect {
-        uint32_t count, primCount, first, baseInstance;
-    } drawCmd = {0, 1, 0, 0};
+
+    if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
+        struct DrawArraysIndirect {
+            uint32_t count, primCount, first, baseInstance;
+        } drawCmd = {0, 1, 0, 0};
+
+        if (first) {
+            g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(drawCmd));
+            first = false;
+        }
+
+        // upload to GPU
+        djgb_to_gl(g_gl.streams[STREAM_SUBD_COUNTER],
+                   (const void *)&drawCmd,
+                   bufferOffset);
+        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
+                         GL_ATOMIC_COUNTER_BUFFER,
+                         STREAM_SUBD_COUNTER);
+    } else {
+        struct DispatchIndirectCommand {
+            uint32_t num_groups_x, num_groups_y, num_groups_z, align;
+        } dispatchCmd = {0, 0, 0, 0};
+
+        if (first) {
+            g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(dispatchCmd));
+            first = false;
+        }
+
+        // upload to GPU
+        djgb_to_gl(g_gl.streams[STREAM_SUBD_COUNTER],
+                   (const void *)&dispatchCmd,
+                   bufferOffset);
+        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
+                         GL_ATOMIC_COUNTER_BUFFER,
+                         STREAM_SUBD_COUNTER);
+    }
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+// -----------------------------------------------------------------------------
+/**
+ * Load Subd Compute Counter Buffer (compute shader only)
+ *
+ * This procedure creates a buffer that stores indirect drawing commands.
+ */
+bool loadCulledSubdCounterBuffer(int *bufferOffset = NULL)
+{
+    static bool first = true;
+    struct DrawElementsIndirectCommand {
+        uint32_t    count,
+                    primCount,
+                    firstIndex,
+                    baseVertex,
+                    baseInstance,
+                    align[3];
+    } drawCmd = {
+        3u << (g_terrain.gpuSubd * 2u), 0, 0, 0, 0, {0, 0, 0}
+    };
 
     if (first) {
-        g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(drawCmd));
+        g_gl.streams[STREAM_CULLED_SUBD_COUNTER] = djgb_create(sizeof(drawCmd));
         first = false;
     }
 
     // upload to GPU
-    djgb_to_gl(g_gl.streams[STREAM_SUBD_COUNTER],
+    djgb_to_gl(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
                (const void *)&drawCmd,
                bufferOffset);
-    djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
+    djgb_glbindrange(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
                      GL_ATOMIC_COUNTER_BUFFER,
-                     STREAM_SUBD_COUNTER);
+                     STREAM_CULLED_SUBD_COUNTER);
 
     return (glGetError() == GL_NO_ERROR);
 }
@@ -938,6 +997,33 @@ bool loadEmptyVertexArray()
 
 // -----------------------------------------------------------------------------
 /**
+ * Load the Instanced Vertex Array (compute shader pass only)
+ *
+ * This will be used to instantiate a triangle grid for each subdivision
+ * key present in the subd buffer.
+ */
+bool loadInstancedGridVertexArray()
+{
+    LOG("Loading {Instanced-Grid-VertexArray}\n");
+    if (glIsVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]))
+        glDeleteVertexArrays(1, &g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+
+    glGenVertexArrays(1, &g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER,
+                 g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glVertexAttribPointer(0, 2, GL_FLOAT, 0, 0, BUFFER_OFFSET(0));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+                 g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+
+    glBindVertexArray(0);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+// -----------------------------------------------------------------------------
+/**
  * Load All Vertex Arrays
  *
  */
@@ -946,6 +1032,7 @@ bool loadVertexArrays()
     bool v = true;
 
     if (v) v&= loadEmptyVertexArray();
+    if (v) v&= loadInstancedGridVertexArray();
 
     return v;
 }
@@ -1309,7 +1396,8 @@ void renderGui(double cpuDt, double gpuDt)
         {
             const char* eMethods[] = {
                 "Tessellation Shader",
-                "Geometry Shader"
+                "Geometry Shader",
+                "Compute Shader"
             };
             ImGui::Text("CPU_dt: %.3f %s",
                         cpuDt < 1. ? cpuDt * 1e3 : cpuDt,
