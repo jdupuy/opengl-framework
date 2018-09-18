@@ -31,10 +31,18 @@ bool isChildZeroKey(in uint key)
 // get xform from bit value
 mat4 bitToXform(in uint bit)
 {
+#if 0
     const mat4 mcc = mat4(4, 1, 0, 0,
                           4, 6, 4, 1,
                           0, 1, 4, 6,
                           0, 0, 0, 1) / 8.0f;
+#else
+    const mat4 mcc = mat4( 0.686887 , 0.0833333, -0.0202201,  0.0226732,
+                           0.3333333, 0.833333 ,  0.3333333, -0.106006,
+                          -0.0202201, 0.0833333,  0.686887 ,  0.72978,
+                           0        , 0        ,  0        , 0.353553);
+//mcc = mcc*mcc;
+#endif
     float b = float(bit);
     float c = 1.0f - b;
     mat4 m = mat4(c, 0, 0, b,
