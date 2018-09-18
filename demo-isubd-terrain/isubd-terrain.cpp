@@ -247,13 +247,13 @@ debug_output_logger(
     }
 
     if(severity == GL_DEBUG_SEVERITY_HIGH || severity == GL_DEBUG_SEVERITY_MEDIUM) {
-        LOG("djg_error: %s %s\n"                \
+        LOG("djg_debug_output: %s %s\n"                \
             "-- Begin -- GL_debug_output\n" \
             "%s\n"                              \
             "-- End -- GL_debug_output\n",
             srcstr, typestr, message);
     } else if(severity == GL_DEBUG_SEVERITY_MEDIUM) {
-        LOG("djg_warn: %s %s\n"                 \
+        LOG("djg_debug_output: %s %s\n"                 \
             "-- Begin -- GL_debug_output\n" \
             "%s\n"                              \
             "-- End -- GL_debug_output\n",
@@ -407,9 +407,9 @@ bool loadTerrainProgram()
     LOG("Loading {Terrain-Program}\n");
     setupSubdKernel(djp);
 
-    if (g_terrain.method == METHOD_TS)
-        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain.glsl"));
-    else if (g_terrain.method == METHOD_GS) {
+    if (g_terrain.method == METHOD_TS) {
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
+    } else if (g_terrain.method == METHOD_GS) {
         int edgeCnt = 1 << g_terrain.gpuSubd;
         int vertexCnt = 0;
 
@@ -419,6 +419,10 @@ bool loadTerrainProgram()
 
         djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
+    } else if (g_terrain.method == METHOD_CS) {
+        djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", STREAM_CULLED_SUBD_COUNTER);
+
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_render.glsl"));
     }
 
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -1255,6 +1259,48 @@ void renderSceneGs(int offset) {
 }
 
 // -----------------------------------------------------------------------------
+void renderSceneCs(int offset) {
+    static int renderOffset = 0;
+    int nextRenderOffset = 0;
+
+    djgb_glbind(g_gl.streams[STREAM_CULLED_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
+    loadCulledSubdCounterBuffer(&nextRenderOffset);
+
+    glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
+
+    // launch compute terrain
+    if (g_terrain.flags.reset) {
+        loadSubdivisionBuffers();
+        g_terrain.pingPong = 0;
+
+        glDispatchCompute(2, 0, 0);
+
+        g_terrain.flags.reset = false;
+    } else {
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_SUBD1,
+                         g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_SUBD2,
+                         g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
+        glDispatchComputeIndirect(offset);
+        g_terrain.pingPong = 1 - g_terrain.pingPong;
+    }
+
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+#if 0
+    // render the terrain
+    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+    glDrawElementsIndirect(GL_TRIANGLES,
+                           GL_UNSIGNED_INT,
+                           BUFFER_OFFSET(renderOffset));
+#endif
+    renderOffset = nextRenderOffset;
+}
+
+// -----------------------------------------------------------------------------
 void renderScene()
 {
     static int offset = 0;
@@ -1273,8 +1319,14 @@ void renderScene()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // bind buffers
-    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
-    loadSubdCounterBuffer(&nextOffset);
+    if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
+        djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
+        loadSubdCounterBuffer(&nextOffset);
+    } else {
+        djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DISPATCH_INDIRECT_BUFFER);
+        loadSubdCounterBuffer(&nextOffset);
+    }
+
     loadTransformBuffer();
 
     // render terrain
@@ -1282,6 +1334,8 @@ void renderScene()
         renderSceneTs(offset);
     else if (g_terrain.method == METHOD_GS)
         renderSceneGs(offset);
+    else if (g_terrain.method == METHOD_CS)
+        renderSceneCs(offset);
 
     offset = nextOffset;
 
