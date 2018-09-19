@@ -60,19 +60,21 @@ struct FramebufferManager {
 
 // -----------------------------------------------------------------------------
 // Camera Manager
+#define INIT_POS dja::vec3(1.5, 0, 0.4)
 struct CameraManager {
     float fovy, zNear, zFar; // perspective settings
     dja::vec3 pos;           // 3D position
     dja::mat3 axis;          // 3D frame
 } g_camera = {
     55.f, 0.001f, 1024.f,
-    dja::vec3(1.5, 0, 0.4),
-    dja::mat3(
-        0.971769, -0.129628, -0.197135,
-        0.127271, 0.991562, -0.024635,
-        0.198665, -0.001150, 0.980067
+    INIT_POS,
+    dja::mat3::lookat(
+        dja::vec3(0.f, 0.f, 0.f),
+        INIT_POS,
+        dja::vec3(0, 0, 1)
     )
 };
+#undef INIT_POS
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
@@ -152,9 +154,9 @@ enum {
     BUFFER_GEOMETRY_VERTICES = STREAM_COUNT,
     BUFFER_GEOMETRY_INDEXES,
     BUFFER_SUBD1, BUFFER_SUBD2,
-    BUFFER_CULLED_SUBD,                 // compute-based pipeline only
-    BUFFER_INSTANCED_GEOMETRY_VERTICES, // compute-based pipeline only
-    BUFFER_INSTANCED_GEOMETRY_INDEXES,  // compute-based pipeline only
+    BUFFER_CULLED_SUBD1, BUFFER_CULLED_SUBD2,   // compute-based pipeline only
+    BUFFER_INSTANCED_GEOMETRY_VERTICES,         // compute-based pipeline only
+    BUFFER_INSTANCED_GEOMETRY_INDEXES,          // compute-based pipeline only
     BUFFER_COUNT
 };
 enum {
@@ -420,7 +422,7 @@ bool loadTerrainProgram()
         djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
     } else if (g_terrain.method == METHOD_CS) {
-        djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", STREAM_CULLED_SUBD_COUNTER);
+        djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
 
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_render.glsl"));
     }
@@ -456,10 +458,7 @@ bool loadSubdCsLodProgram()
 
     djgp_push_string(djp,
                      "#define BUFFER_BINDING_CULLED_SUBD %i\n",
-                     BUFFER_CULLED_SUBD);
-    djgp_push_string(djp,
-                     "#define BUFFER_BINDING_SUBD_COUNTER %i\n",
-                     STREAM_SUBD_COUNTER);
+                     BUFFER_CULLED_SUBD2);
     djgp_push_string(djp,
                      "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n",
                      STREAM_CULLED_SUBD_COUNTER);
@@ -700,7 +699,7 @@ bool loadTransformBuffer()
         g_camera.zFar
     );
     dja::mat4 viewInv = dja::mat4::homogeneous::translation(g_camera.pos)
-                  * dja::mat4::homogeneous::from_mat3(g_camera.axis);
+                      * dja::mat4::homogeneous::from_mat3(g_camera.axis);
     dja::mat4 view = dja::inverse(viewInv);
 
 
@@ -867,6 +866,11 @@ bool loadSubdivisionBuffers()
 
     loadSubdBuffer(BUFFER_SUBD1, bufferCapacity);
     loadSubdBuffer(BUFFER_SUBD2, bufferCapacity);
+    if (g_terrain.method == METHOD_CS) {
+        LOG("Loading {Culled-Subd-Buffer}\n");
+        loadSubdBuffer(BUFFER_CULLED_SUBD1, bufferCapacity);
+        loadSubdBuffer(BUFFER_CULLED_SUBD2, bufferCapacity);
+    }
 
     return (glGetError() == GL_NO_ERROR);
 }
@@ -876,85 +880,79 @@ bool loadSubdivisionBuffers()
  * Load Subd Counter Buffer
  *
  * This procedure creates a buffer that stores indirect drawing commands.
+ * For the compute shader pipeline, two counters are recquired.
  */
-bool loadSubdCounterBuffer(int *bufferOffset = NULL)
+union IndirectCommand {
+    struct {
+        uint32_t num_groups_x,
+                 num_groups_y,
+                 num_groups_z,
+                 align[5];
+    } dispatchIndirect;
+    struct {
+        uint32_t count,
+                 primCount,
+                 first,
+                 baseInstance,
+                 align[4];
+    } drawArraysIndirect;
+    struct {
+        uint32_t count,
+                 primCount,
+                 firstIndex,
+                 baseVertex,
+                 baseInstance,
+                 align[3];
+    } drawElementsIndirect;
+};
+
+bool streamSubdCounterBuffer(int *bufferOffset = NULL)
 {
-    static bool first = true;
-
     if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
-        struct DrawArraysIndirect {
-            uint32_t count, primCount, first, baseInstance;
-        } drawCmd = {0, 1, 0, 0};
-
-        if (first) {
-            g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(drawCmd));
-            first = false;
-        }
+        /*count, primCount, first, baseInstance, align[4];*/
+        IndirectCommand drawArrays = {0u, 1u, 0u, 0u, 0u, 0u, 0u, 0u};
 
         // upload to GPU
         djgb_to_gl(g_gl.streams[STREAM_SUBD_COUNTER],
-                   (const void *)&drawCmd,
+                   (const void *)&drawArrays,
                    bufferOffset);
         djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
                          GL_ATOMIC_COUNTER_BUFFER,
                          STREAM_SUBD_COUNTER);
     } else {
-        struct DispatchIndirectCommand {
-            uint32_t num_groups_x, num_groups_y, num_groups_z, align;
-        } dispatchCmd = {0, 0, 0, 0};
-
-        if (first) {
-            g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(dispatchCmd));
-            first = false;
-        }
+        /* num_groups_x, num_groups_y, num_groups_z, align[5] */
+        IndirectCommand dispatch = {0u, 1u, 1u, 0u, 0u, 0u, 0u, 0u};
+        /* count, primCount, firstIndex, baseVertex, baseInstance, align[3];*/
+        const uint32_t cnt = 3u << (g_terrain.gpuSubd * 2u);
+        IndirectCommand drawElements = {cnt, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
 
         // upload to GPU
         djgb_to_gl(g_gl.streams[STREAM_SUBD_COUNTER],
-                   (const void *)&dispatchCmd,
+                   (const void *)&dispatch,
+                   bufferOffset);
+        djgb_to_gl(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
+                   (const void *)&drawElements,
                    bufferOffset);
         djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
                          GL_ATOMIC_COUNTER_BUFFER,
                          STREAM_SUBD_COUNTER);
+        djgb_glbindrange(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
+                         GL_ATOMIC_COUNTER_BUFFER,
+                         STREAM_CULLED_SUBD_COUNTER);
     }
 
     return (glGetError() == GL_NO_ERROR);
 }
 
-// -----------------------------------------------------------------------------
-/**
- * Load Subd Compute Counter Buffer (compute shader only)
- *
- * This procedure creates a buffer that stores indirect drawing commands.
- */
-bool loadCulledSubdCounterBuffer(int *bufferOffset = NULL)
+bool loadSubdCounterBuffer()
 {
-    static bool first = true;
-    struct DrawElementsIndirectCommand {
-        uint32_t    count,
-                    primCount,
-                    firstIndex,
-                    baseVertex,
-                    baseInstance,
-                    align[3];
-    } drawCmd = {
-        3u << (g_terrain.gpuSubd * 2u), 0, 0, 0, 0, {0, 0, 0}
-    };
+    LOG("Loading {Subd-Counter-Buffer}\n");
+    g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(IndirectCommand));
+    g_gl.streams[STREAM_CULLED_SUBD_COUNTER] = djgb_create(sizeof(IndirectCommand));
 
-    if (first) {
-        g_gl.streams[STREAM_CULLED_SUBD_COUNTER] = djgb_create(sizeof(drawCmd));
-        first = false;
-    }
-
-    // upload to GPU
-    djgb_to_gl(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
-               (const void *)&drawCmd,
-               bufferOffset);
-    djgb_glbindrange(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
-                     GL_ATOMIC_COUNTER_BUFFER,
-                     STREAM_CULLED_SUBD_COUNTER);
-
-    return (glGetError() == GL_NO_ERROR);
+    return streamSubdCounterBuffer();
 }
+
 
 // -----------------------------------------------------------------------------
 /**
@@ -1006,7 +1004,7 @@ bool loadEmptyVertexArray()
  * This will be used to instantiate a triangle grid for each subdivision
  * key present in the subd buffer.
  */
-bool loadInstancedGridVertexArray()
+bool loadInstancedGeometryVertexArray()
 {
     LOG("Loading {Instanced-Grid-VertexArray}\n");
     if (glIsVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]))
@@ -1036,7 +1034,7 @@ bool loadVertexArrays()
     bool v = true;
 
     if (v) v&= loadEmptyVertexArray();
-    if (v) v&= loadInstancedGridVertexArray();
+    if (v) v&= loadInstancedGeometryVertexArray();
 
     return v;
 }
@@ -1206,20 +1204,28 @@ void release()
 ////////////////////////////////////////////////////////////////////////////////
 
 // -----------------------------------------------------------------------------
-void renderSceneTs(int offset) {
+void renderSceneTs() {
+    static int offset = 0;
+    int nextOffset = 0;
+
     glPatchParameteri(GL_PATCH_VERTICES, 1);
     glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
+
 
     // render terrain
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
+        loadSubdCounterBuffer();
         g_terrain.pingPong = 0;
+        offset = 0;
 
         glDrawArrays(GL_PATCHES, 0, 2);
 
         g_terrain.flags.reset = false;
     } else {
+        streamSubdCounterBuffer(&nextOffset);
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                          BUFFER_SUBD1,
@@ -1230,22 +1236,31 @@ void renderSceneTs(int offset) {
         glDrawArraysIndirect(GL_PATCHES, BUFFER_OFFSET(offset));
         g_terrain.pingPong = 1 - g_terrain.pingPong;
     }
+
+    offset = nextOffset;
 }
 
 // -----------------------------------------------------------------------------
-void renderSceneGs(int offset) {
+void renderSceneGs() {
+    static int offset = 0;
+    int nextOffset = 0;
+
     glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
 
     // render terrain
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
+        loadSubdCounterBuffer();
         g_terrain.pingPong = 0;
+        offset = 0;
 
         glDrawArrays(GL_POINTS, 0, 2);
 
         g_terrain.flags.reset = false;
     } else {
+        streamSubdCounterBuffer(&nextOffset);
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                          BUFFER_SUBD1,
@@ -1256,56 +1271,78 @@ void renderSceneGs(int offset) {
         glDrawArraysIndirect(GL_POINTS, BUFFER_OFFSET(offset));
         g_terrain.pingPong = 1 - g_terrain.pingPong;
     }
+
+    offset = nextOffset;
 }
 
 // -----------------------------------------------------------------------------
-void renderSceneCs(int offset) {
-    static int renderOffset = 0;
-    int nextRenderOffset = 0;
+void renderSceneCs() {
+    static int offset = 0;
+    int nextOffset = 0;
 
-    djgb_glbind(g_gl.streams[STREAM_CULLED_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
-    loadCulledSubdCounterBuffer(&nextRenderOffset);
+    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER],
+                GL_DISPATCH_INDIRECT_BUFFER);
+    djgb_glbind(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
+                GL_DRAW_INDIRECT_BUFFER);
 
-    glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
-
-    // launch compute terrain
+    // update the subd buffers
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
+        loadSubdCounterBuffer();
         g_terrain.pingPong = 0;
+        offset = 0;
 
-        glDispatchCompute(2, 0, 0);
+        // update the subd buffer
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
+        glDispatchCompute(2, 1, 1);
+
+        // render the terrain
+        glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+        glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+        glDrawElementsInstanced(GL_TRIANGLES,
+                                3u << (g_terrain.gpuSubd * 2u),
+                                GL_UNSIGNED_INT,
+                                BUFFER_OFFSET(0),
+                                2);
 
         g_terrain.flags.reset = false;
     } else {
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        streamSubdCounterBuffer(&nextOffset);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                          BUFFER_SUBD1,
                          g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                          BUFFER_SUBD2,
                          g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_CULLED_SUBD1,
+                         g_gl.buffers[BUFFER_CULLED_SUBD1 + 1 - g_terrain.pingPong]);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_CULLED_SUBD2,
+                         g_gl.buffers[BUFFER_CULLED_SUBD1 + g_terrain.pingPong]);
+
+        // update the subd buffer
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
         glDispatchComputeIndirect(offset);
+
+        // render the terrain
+        glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+        glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+        glDrawElementsIndirect(GL_TRIANGLES,
+                               GL_UNSIGNED_INT,
+                               BUFFER_OFFSET(offset));
+
         g_terrain.pingPong = 1 - g_terrain.pingPong;
     }
 
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
-#if 0
-    // render the terrain
-    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
-    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
-    glDrawElementsIndirect(GL_TRIANGLES,
-                           GL_UNSIGNED_INT,
-                           BUFFER_OFFSET(renderOffset));
-#endif
-    renderOffset = nextRenderOffset;
+
+    offset = nextOffset;
 }
 
 // -----------------------------------------------------------------------------
 void renderScene()
 {
-    static int offset = 0;
-    int nextOffset = 0;
-
     // configure GL state
     glBindFramebuffer(GL_FRAMEBUFFER, g_gl.framebuffers[FRAMEBUFFER_SCENE]);
     glViewport(0, 0, g_framebuffer.w, g_framebuffer.h);
@@ -1318,26 +1355,22 @@ void renderScene()
     glClearColor(0.5, 0.5, 0.5, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // bind buffers
-    if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
-        djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
-        loadSubdCounterBuffer(&nextOffset);
-    } else {
-        djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DISPATCH_INDIRECT_BUFFER);
-        loadSubdCounterBuffer(&nextOffset);
-    }
-
     loadTransformBuffer();
 
-    // render terrain
-    if (g_terrain.method == METHOD_TS)
-        renderSceneTs(offset);
-    else if (g_terrain.method == METHOD_GS)
-        renderSceneGs(offset);
-    else if (g_terrain.method == METHOD_CS)
-        renderSceneCs(offset);
-
-    offset = nextOffset;
+    // render
+    switch (g_terrain.method) {
+        case METHOD_TS:
+            renderSceneTs();
+            break;
+        case METHOD_GS:
+            renderSceneGs();
+            break;
+        case METHOD_CS:
+            renderSceneCs();
+            break;
+        default:
+            break;
+    }
 
     // reset GL state
     if (g_terrain.flags.wire)
@@ -1472,8 +1505,10 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::SameLine();
             ImGui::Checkbox("wire", &g_terrain.flags.wire);
             ImGui::SameLine();
-            if (ImGui::Checkbox("freeze", &g_terrain.flags.freeze))
+            if (ImGui::Checkbox("freeze", &g_terrain.flags.freeze)) {
+                loadSubdCsLodProgram();
                 loadTerrainProgram();
+            }
             if (!g_terrain.dmap.pathToFile.empty()) {
                 ImGui::SameLine();
                 if (ImGui::Checkbox("displace", &g_terrain.flags.displace))
@@ -1481,6 +1516,9 @@ void renderGui(double cpuDt, double gpuDt)
             }
             if (ImGui::SliderInt("PatchSubdLevel", &g_terrain.gpuSubd, 0, 6)) {
                 loadTerrainProgram();
+                loadSubdCsLodProgram();
+                loadInstancedGeometryBuffers();
+                loadInstancedGeometryVertexArray();
                 g_terrain.flags.reset = true;
             }
             if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 64)) {
