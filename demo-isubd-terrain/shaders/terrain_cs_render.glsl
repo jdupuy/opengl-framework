@@ -78,7 +78,7 @@ void main()
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
-    o_TexCoord = finalVertex.xy;
+    o_TexCoord = i_TessCoord;
     gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
 }
 #endif
@@ -95,7 +95,12 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    o_FragColor = vec4(0, 0, 0, 1);
+    vec3 c[3] = vec3[3](vec3(0.0,1.0,1.0)/4.0,
+                        vec3(0.86,0.00,0.00),
+                        vec3(1.0,0.50,0.00)/1.0);
+    vec3 color = berp(c, i_TexCoord);
+
+    o_FragColor = vec4(color, 1);
 }
 #endif
 

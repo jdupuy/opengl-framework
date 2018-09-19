@@ -947,6 +947,11 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
 bool loadSubdCounterBuffer()
 {
     LOG("Loading {Subd-Counter-Buffer}\n");
+    if (g_gl.streams[STREAM_SUBD_COUNTER])
+        djgb_release(g_gl.streams[STREAM_SUBD_COUNTER]);
+    if (g_gl.streams[STREAM_CULLED_SUBD_COUNTER])
+        djgb_release(g_gl.streams[STREAM_CULLED_SUBD_COUNTER]);
+
     g_gl.streams[STREAM_SUBD_COUNTER] = djgb_create(sizeof(IndirectCommand));
     g_gl.streams[STREAM_CULLED_SUBD_COUNTER] = djgb_create(sizeof(IndirectCommand));
 
@@ -1709,7 +1714,9 @@ int main(int argc, char **argv)
         ImGui::CreateContext();
         ImGui_ImplGlfwGL3_Init(window, false);
         ImGui::StyleColorsDark();
+        LOG("-- Begin -- Init\n");
         init();
+        LOG("-- End -- Init\n");
 
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
