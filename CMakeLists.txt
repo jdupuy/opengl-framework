@@ -22,8 +22,15 @@ aux_source_directory(submodules/imgui IMGUI_SRC_FILES)
 set(IMGUI_INCLUDE_DIR imgui submodules/imgui)
 add_library(imgui STATIC imgui/imgui_impl.cpp ${IMGUI_SRC_FILES})
 
+
 # ------------------------------------------------------------------------------
 project (opengl)
+
+# compiler specific options
+if(MSVC OR MSVC_IDE)
+	add_definitions("/D_CRT_SECURE_NO_WARNINGS")
+endif()
+
 
 # ------------------------------------------------------------------------------
 set(SRC_DIR demo-hello-window)
@@ -100,7 +107,3 @@ target_link_libraries(isubd-loop glfw imgui)
 target_compile_definitions(isubd-loop PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
 unset(SRC_FILES)
 
-# ------------------------------------------------------------------------------
-# debug stuff
-message("CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
-message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")

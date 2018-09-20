@@ -55,12 +55,12 @@ struct FramebufferManager {
 } g_framebuffer = {
     VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT, AA_MSAA2,
     {false},
-    {61./255., 119./255., 192./225}
+    {61.0f/255.0f, 119.0f/255.0f, 192.0f/255.0f}
 };
 
 // -----------------------------------------------------------------------------
 // Camera Manager
-#define INIT_POS dja::vec3(1.5, 0, 0.4)
+#define INIT_POS dja::vec3(1.5f, 0.0f, 0.4f)
 struct CameraManager {
     float fovy, zNear, zFar; // perspective settings
     dja::vec3 pos;           // 3D position
@@ -216,7 +216,7 @@ char *strcat2(char *dst, const char *src1, const char *src2)
     return strcat(dst, src2);
 }
 
-static void
+static void APIENTRY
 debug_output_logger(
         GLenum source,
         GLenum type,
@@ -224,7 +224,7 @@ debug_output_logger(
         GLenum severity,
         GLsizei length,
         const GLchar* message,
-        const GLvoid* userParam
+        const void* userParam
         ) {
     char srcstr[32], typestr[32];
 

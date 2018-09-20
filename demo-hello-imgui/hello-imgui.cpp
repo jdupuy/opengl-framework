@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
 
-			glClearColor(0.8, 0.8, 0.8, 1.0);
+			glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 			ImGui_ImplGlfwGL3_NewFrame();
 			renderGui();

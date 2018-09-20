@@ -229,7 +229,7 @@ char *strcat2(char *dst, const char *src1, const char *src2)
 	return strcat(dst, src2);
 }
 
-static void
+static void APIENTRY
 debug_output_logger(
         GLenum source,
         GLenum type,
@@ -278,8 +278,8 @@ debug_output_logger(
 
 void log_debug_output(void)
 {
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glDebugMessageCallback(&debug_output_logger, NULL);
+	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+	glDebugMessageCallback(&debug_output_logger, NULL);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

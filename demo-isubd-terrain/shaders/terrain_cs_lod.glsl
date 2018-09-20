@@ -32,7 +32,7 @@ layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
 layout (binding = BUFFER_BINDING_CULLED_SUBD_COUNTER)
-uniform atomic_uint u_CulledSubdBufferCounter[];
+uniform atomic_uint u_CulledSubdBufferCounter[2];
 
 struct Transform {
     mat4 modelView;
