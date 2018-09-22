@@ -280,10 +280,8 @@ template <int N>
 struct halfedge {
     struct vertex { float x, y, z, w; };
     struct edge { int v0, ef, eb, en; }; /* vertex + next, previous, and neighbour edges */
-    struct face { int e[4]; };
     std::vector<vertex> vbuf;
     std::vector<edge> ebuf;
-    std::vector<face> fbuf;
 
     explicit halfedge(const char *path_to_obj);
 private:
@@ -408,7 +406,6 @@ halfedge<N>::halfedge(const halfedge<N>::objloader &obj)
     // build topology
     for (int i = 0; i < faceCount; ++i) {
         int edgeCount = i * N;
-        face f;
 
         for (int j = 0; j < N; ++j) {
             int v0 = obj.fbuf[edgeCount + j];
@@ -435,10 +432,7 @@ halfedge<N>::halfedge(const halfedge<N>::objloader &obj)
             }
 
             ebuf.push_back(e);
-            f.e[j] = edgeIndex;
         }
-
-        fbuf.push_back(f);
     }
 }
 
@@ -904,7 +898,23 @@ bool loadTransformBuffer()
 bool loadGeometryBuffers()
 {
     LOG("Loading {Mesh-Vertex-Buffer}\n");
-    halfedge3 mesh = halfedge3("/home/jdups/sources/scenes/objs/cube.obj");
+    halfedge4 mesh = halfedge4("/home/jdups/sources/scenes/objs/bigguy.obj");
+#if 0
+    for (int i = 0; i < (int)mesh.ebuf.size(); ++i) {
+        halfedge4::edge e = mesh.ebuf[i];
+        halfedge4::edge it = mesh.ebuf[mesh.ebuf[e.en].ef];
+        int v = 1;
+
+        while (memcmp(&it, &e, sizeof(e)) != 0) {
+            ++v;
+            int en = it.en;
+            if (en == -1) break;
+            it = mesh.ebuf[mesh.ebuf[en].ef];
+        }
+        if (v > 4)
+            std::cout << "valence: " << v << std::endl;
+    }
+#endif // valence counting code
 
     if (glIsBuffer(g_gl.buffers[BUFFER_GEOMETRY_VERTICES]))
         glDeleteBuffers(1, &g_gl.buffers[BUFFER_GEOMETRY_VERTICES]);
