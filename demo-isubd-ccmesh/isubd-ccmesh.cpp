@@ -10,8 +10,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
-#include <map>
-#include <vector>
+#include <map>        // std::map
+#include <vector>     // std::vector
+#include <algorithm>  // std::min/max
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
