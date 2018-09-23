@@ -138,13 +138,13 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
-    int i0 = u_EdgeBuffer[3*primID  ].x;
-    int i1 = u_EdgeBuffer[3*primID+1].x;
-    int i2 = u_EdgeBuffer[3*primID+2].x;
+    int i0 = u_EdgeBuffer[4*primID  ].x;
+    int i1 = u_EdgeBuffer[4*primID+1].x;
+    int i2 = u_EdgeBuffer[4*primID+2].x;
     vec3 v_in[3] = vec3[3](
-        vec3(u_VertexBuffer[i0].xyz),
-        vec3(u_VertexBuffer[i1].xyz),
-        vec3(u_VertexBuffer[i2].xyz)
+        vec3(u_VertexBuffer[i0].zxy),
+        vec3(u_VertexBuffer[i1].zxy),
+        vec3(u_VertexBuffer[i2].zxy)
     );
 
     // compute distance-based LOD
