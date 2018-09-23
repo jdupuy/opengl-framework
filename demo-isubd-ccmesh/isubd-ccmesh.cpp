@@ -86,22 +86,22 @@ struct CameraManager {
 // Quadtree Manager
 enum {METHOD_TS, METHOD_GS, METHOD_CS};
 struct GeometryManager {
-    struct {bool displace, cull, freeze, wire, reset;} flags;
+    struct {bool uniform, displace, cull, freeze, wire, reset;} flags;
     struct {
         std::string pathToFile;
         float scale;
     } dmap;
     int method;
-    int gpuSubd;
+    int gpuSubd, uniformSubd;
     int pingPong;
     float primitivePixelLengthTarget;
     std::unique_ptr<halfedge4> mesh;
     int regPatchCount;
 } g_geometry = {
-    {false, true, false, false, true},
+    {true, false, true, false, false, true},
     {std::string(), 0.3f},
     METHOD_TS,
-    3,
+    3, 1,
     0,
     10.f,
     nullptr,
@@ -391,12 +391,14 @@ void setupSubdKernel(djg_program *djp)
 {
     char buf[1024];
 
-    if (g_geometry.flags.displace)
-        djgp_push_string(djp, "#define FLAG_DISPLACE 1\n");
     if (g_geometry.flags.cull)
         djgp_push_string(djp, "#define FLAG_CULL 1\n");
     if (g_geometry.flags.freeze)
         djgp_push_string(djp, "#define FLAG_FREEZE 1\n");
+    if (g_geometry.flags.uniform) {
+        djgp_push_string(djp, "#define FLAG_UNIFORM 1\n");
+        djgp_push_string(djp, "#define UNIFORM_SUBD_FACTOR %i\n", g_geometry.uniformSubd);
+    }
 
     djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_geometry.gpuSubd);
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
@@ -421,7 +423,7 @@ bool loadTerrainProgram()
     setupSubdKernel(djp);
 
     if (g_geometry.method == METHOD_TS) {
-        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "cc_ts.glsl"));
     } else if (g_geometry.method == METHOD_GS) {
         int edgeCnt = 1 << g_geometry.gpuSubd;
         int vertexCnt = 0;
@@ -859,21 +861,22 @@ void loadSubdBuffer(int id, size_t bufferCapacity)
 
     // only add regular patches
     for (int i = 0; i < (int)mesh->ebuf.size(); i+= 4) {
-        halfedge4::edge e = mesh->ebuf[i];
-        halfedge4::edge it = mesh->ebuf[mesh->ebuf[e.en].ef];
-        int v = 1;
+        int sumval = 4;
 
-        while (memcmp(&it, &e, sizeof(e)) != 0) {
-            int en = it.en;
+        for (int j = 0; j < 4; ++j) {
+            const halfedge4::edge *begin = &mesh->ebuf[i+j];
+            if (begin->en == -1)
+                break;
 
-            if (en == -1)
-                break; // no neighbours
+            const halfedge4::edge *it = &mesh->ebuf[mesh->ebuf[begin->en].ef];
 
-            it = mesh->ebuf[mesh->ebuf[en].ef];
-            ++v;
+            while (it->en != -1 && memcmp(begin, it, sizeof(*it)) != 0) {
+                it = &mesh->ebuf[mesh->ebuf[it->en].ef];
+                ++sumval;
+            }
         }
 
-        if (v == 4) {
+        if (sumval == 16) {
             data.push_back((uint32_t)i / 4u); // primID
             data.push_back(1u);          // initLoD
         }
@@ -1538,6 +1541,11 @@ void renderGui(double cpuDt, double gpuDt)
             }
             ImGui::Text("flags: ");
             ImGui::SameLine();
+            if (ImGui::Checkbox("uniform", &g_geometry.flags.uniform)) {
+                loadTerrainProgram();
+                loadSubdCsLodProgram();
+            }
+            ImGui::SameLine();
             if (ImGui::Checkbox("cull", &g_geometry.flags.cull))
                 loadTerrainProgram();
             ImGui::SameLine();
@@ -1559,8 +1567,15 @@ void renderGui(double cpuDt, double gpuDt)
                 loadInstancedGeometryVertexArray();
                 g_geometry.flags.reset = true;
             }
-            if (ImGui::SliderFloat("ScreenRes", &g_geometry.primitivePixelLengthTarget, 1, 64)) {
-                configureTerrainProgram();
+            if (g_geometry.flags.uniform) {
+                if (ImGui::SliderInt("SubdLevel", &g_geometry.uniformSubd, 0, 15)) {
+                    loadTerrainProgram();
+                    loadSubdCsLodProgram();
+                }
+            }  else {
+                if (ImGui::SliderFloat("ScreenRes", &g_geometry.primitivePixelLengthTarget, 1, 64)) {
+                    configureTerrainProgram();
+                }
             }
             if (ImGui::SliderFloat("DmapScale", &g_geometry.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
