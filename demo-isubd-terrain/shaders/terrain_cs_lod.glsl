@@ -67,6 +67,18 @@ float distanceToLod(float z, float lodFactor)
     return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
+// -----------------------------------------------------------------------------
+/**
+ * Compute LoD Shader
+ *
+ * This compute shader is responsible for updating the subdivision
+ * buffer and visible buffer that will be sent to the rasterizer.
+ */
+#ifdef COMPUTE_SHADER
+layout (local_size_x = 1,
+        local_size_y = 1,
+        local_size_z = 1) in;
+
 float computeLod(vec3 c)
 {
 #if FLAG_DISPLACE
@@ -84,17 +96,6 @@ float computeLod(in vec4 v[3])
     vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
     return computeLod(c);
 }
-// -----------------------------------------------------------------------------
-/**
- * Compute LoD Shader
- *
- * This compute shader is responsible for updating the subdivision
- * buffer and visible buffer that will be sent to the rasterizer.
- */
-#ifdef COMPUTE_SHADER
-layout (local_size_x = 1,
-        local_size_y = 1,
-        local_size_z = 1) in;
 
 void writeKey(uint primID, uint key)
 {
