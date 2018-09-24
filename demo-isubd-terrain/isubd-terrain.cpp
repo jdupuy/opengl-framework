@@ -1528,6 +1528,7 @@ void renderGui(double cpuDt, double gpuDt)
             }
             if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 64)) {
                 configureTerrainProgram();
+                configureSubdCsLodProgram();
             }
             if (ImGui::SliderFloat("DmapScale", &g_terrain.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
