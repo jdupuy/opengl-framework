@@ -101,7 +101,7 @@ struct GeometryManager {
     {true, false, true, false, false, true},
     {std::string(), 0.3f},
     METHOD_TS,
-    3, 1,
+    0, 1,
     0,
     10.f,
     nullptr,
@@ -745,7 +745,7 @@ bool loadGeometryBuffers()
 {
     LOG("Loading {Mesh-Vertex-Buffer}\n");
     g_geometry.mesh = std::unique_ptr<halfedge4>(
-                          new halfedge4("/home/jdups/sources/scenes/objs/bigguy.obj")
+                          new halfedge4("/home/jdups/Dropbox/scenes/objs/torus.obj")
                           );
     const halfedge4 *mesh = g_geometry.mesh.get();
 

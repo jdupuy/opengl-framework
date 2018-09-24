@@ -234,11 +234,7 @@ layout(location = 0) out vec2 o_TexCoord;
 
 vec4 berp(in vec4 v_in[4], vec2 u)
 {
-#if 1 //XXX debug
     return mix(mix(v_in[0], v_in[1], u.x), mix(v_in[3], v_in[2], u.x), u.y);
-#else
-    return mix(mix(v_in[0], v_in[1], u.x), mix(v_in[2], v_in[3], u.x), u.y);
-#endif
 }
 
 void main()
@@ -246,7 +242,7 @@ void main()
     vec4 v[4] = i_Patch[0].vertices;
     vec4 finalVertex = berp(v, gl_TessCoord.xy);
 
-    o_TexCoord = finalVertex.xy;
+    o_TexCoord = gl_TessCoord.xy;
     gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
@@ -261,9 +257,21 @@ void main()
 layout(location = 0) in vec2 i_TexCoord;
 layout(location = 0) out vec4 o_FragColor;
 
+// barycentric interpolation
+vec3 berp(in vec3 v_in[4], in vec2 u)
+{
+    return mix(mix(v_in[0], v_in[1], u.x), mix(v_in[3], v_in[2], u.x), u.y);
+}
+
 void main()
 {
-    o_FragColor = vec4(0, 0, 0, 1);
+    vec3 c[4] = vec3[4](vec3(0.0,0.25,0.25),
+                        vec3(0.86,0.00,0.00),
+                        vec3(1.0,0.50,0.00),
+                        vec3(0.5));
+    vec3 color = berp(c, i_TexCoord);
+
+    o_FragColor = vec4(color, 1);
 }
 
 #endif
