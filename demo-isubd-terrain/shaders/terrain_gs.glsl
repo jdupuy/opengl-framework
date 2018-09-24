@@ -95,9 +95,9 @@ float computeLod(vec3 c)
     return distanceToLod(z, u_LodFactor);
 }
 
-float computeLod(in vec3 v[3])
+float computeLod(in vec4 v[3])
 {
-    vec3 c = (v[1] + v[2]) / 2.0;
+    vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
     return computeLod(c);
 }
 
@@ -137,15 +137,15 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
-    vec3 v_in[3] = vec3[3](
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3    ]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]].xyz)
+    vec4 v_in[3] = vec4[3](
+        u_VertexBuffer[u_IndexBuffer[primID * 3    ]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
     );
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec3 v[3], vp[3]; subd(key, v_in, v, vp);
+    vec4 v[3], vp[3]; subd(key, v_in, v, vp);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -156,8 +156,8 @@ void main()
 #if FLAG_CULL
     // Cull invisible nodes
     mat4 mvp = u_Transform.modelViewProjection;
-    vec3 bmin = min(min(v[0], v[1]), v[2]);
-    vec3 bmax = max(max(v[0], v[1]), v[2]);
+    vec4 bmin = min(min(v[0], v[1]), v[2]);
+    vec4 bmax = max(max(v[0], v[1]), v[2]);
 
     // account for displacement in bound computations
 #   if FLAG_DISPLACE
@@ -165,7 +165,7 @@ void main()
     bmax.z = u_DmapFactor;
 #   endif
 
-    if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
+    if (/* is visible ? */frustumCullingTest(mvp, bmin.xyz, bmax.xyz)) {
 #else
     if (true) {
 #endif // FLAG_CULL
@@ -181,14 +181,14 @@ void main()
                 int ui = j >> 1;
                 int vi = (edgeCnt - 1) - (i - (j & 1));
                 vec2 tessCoord = vec2(ui, vi) * edgeLength;
-                vec3 finalVertex = berp(v, tessCoord);
+                vec4 finalVertex = berp(v, tessCoord);
 
 #if FLAG_DISPLACE
                 finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
                 o_TexCoord = tessCoord;
-                gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
+                gl_Position = u_Transform.modelViewProjection * finalVertex;
                 EmitVertex();
             }
             EndPrimitive();

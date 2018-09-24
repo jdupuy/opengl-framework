@@ -63,9 +63,13 @@ vec3 berp(in vec3 v[3], in vec2 u)
 {
     return v[0] + u.x * (v[1] - v[0]) + u.y * (v[2] - v[0]);
 }
+vec4 berp(in vec4 v[3], in vec2 u)
+{
+    return v[0] + u.x * (v[1] - v[0]) + u.y * (v[2] - v[0]);
+}
 
 // subdivision routine (vertex position only)
-void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3])
+void subd(in uint key, in vec4 v_in[3], out vec4 v_out[3])
 {
     mat3 xf = keyToXform(key);
     vec2 u1 = (xf * vec3(0, 0, 1)).xy;
@@ -79,7 +83,7 @@ void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3])
 
 // subdivision routine (vertex position only)
 // also computes parent position
-void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3], out vec3 v_out_p[3])
+void subd(in uint key, in vec4 v_in[3], out vec4 v_out[3], out vec4 v_out_p[3])
 {
     mat3 xfp; mat3 xf = keyToXform(key, xfp);
     vec2 u1 = (xf * vec3(0, 0, 1)).xy;

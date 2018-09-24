@@ -62,24 +62,24 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_CulledSubdBuffer[threadID].x;
-    vec3 v_in[3] = vec3[3](
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3    ]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]].xyz)
+    vec4 v_in[3] = vec4[3](
+        u_VertexBuffer[u_IndexBuffer[primID * 3    ]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
     );
 
     // compute sub-triangle associated to the key
     uint key = u_CulledSubdBuffer[threadID].y;
-    vec3 v[3]; subd(key, v_in, v);
+    vec4 v[3]; subd(key, v_in, v);
 
     // compute vertex location
-    vec3 finalVertex = berp(v, i_TessCoord);
+    vec4 finalVertex = berp(v, i_TessCoord);
 #if FLAG_DISPLACE
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
     o_TexCoord = i_TessCoord;
-    gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
+    gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
 
