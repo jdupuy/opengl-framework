@@ -85,14 +85,14 @@ struct TerrainManager {
         std::string pathToFile;
         float scale;
     } dmap;
-    int method;
+    int method, computeThreadCount;
     int gpuSubd;
     int pingPong;
     float primitivePixelLengthTarget;
 } g_terrain = {
     {false, true, false, false, true},
     {std::string(), 0.3f},
-    METHOD_TS,
+    METHOD_TS, 0,
     3,
     0,
     10.f
@@ -161,8 +161,8 @@ enum {
 };
 enum {
     PROGRAM_VIEWER,
-    PROGRAM_SUBD_CS_LOD,      // compute-base pipeline only
-    PROGRAM_SUBD_CS_INDIRECT, // compute-base pipeline only
+    PROGRAM_SUBD_CS_LOD,    // compute-base pipeline only
+    PROGRAM_SUBD_CS_BATCH,  // compute-base pipeline only
     PROGRAM_TERRAIN,
     PROGRAM_COUNT
 };
@@ -457,6 +457,9 @@ bool loadSubdCsLodProgram()
     setupSubdKernel(djp);
 
     djgp_push_string(djp,
+                     "#define COMPUTE_THREAD_COUNT %i\n",
+                     1 << g_terrain.computeThreadCount);
+    djgp_push_string(djp,
                      "#define BUFFER_BINDING_CULLED_SUBD %i\n",
                      BUFFER_CULLED_SUBD2);
     djgp_push_string(djp,
@@ -484,6 +487,33 @@ bool loadSubdCsLodProgram()
     return (glGetError() == GL_NO_ERROR);
 }
 
+bool loadSubdCsBatchProgram()
+{
+    djg_program *djp = djgp_create();
+    GLuint *program = &g_gl.programs[PROGRAM_SUBD_CS_BATCH];
+    char buf[1024];
+
+    LOG("Loading {Compute-Batch-Program}\n");
+
+    djgp_push_string(djp,
+                     "#define COMPUTE_THREAD_COUNT %i\n",
+                     1 << g_terrain.computeThreadCount);
+    djgp_push_string(djp,
+                     "#define BUFFER_BINDING_SUBD_COUNTER %i\n",
+                     STREAM_SUBD_COUNTER);
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_batch.glsl"));
+
+    if (!djgp_to_gl(djp, 450, false, true, program)) {
+        LOG("=> Failure <=\n");
+        djgp_release(djp);
+
+        return false;
+    }
+    djgp_release(djp);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
 // -----------------------------------------------------------------------------
 /**
  * Load All Programs
@@ -496,6 +526,7 @@ bool loadPrograms()
     if (v) v&= loadViewerProgram();
     if (v) v&= loadTerrainProgram();
     if (v) v&= loadSubdCsLodProgram();
+    if (v) v&= loadSubdCsBatchProgram();
 
     return v;
 }
@@ -1338,6 +1369,12 @@ void renderSceneCs() {
                                GL_UNSIGNED_INT,
                                BUFFER_OFFSET(offset));
 
+        // update batch
+        djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER],
+                    GL_SHADER_STORAGE_BUFFER);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glDispatchCompute(1, 1, 1);
+
         g_terrain.pingPong = 1 - g_terrain.pingPong;
     }
 
@@ -1532,6 +1569,13 @@ void renderGui(double cpuDt, double gpuDt)
             }
             if (ImGui::SliderFloat("DmapScale", &g_terrain.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
+            }
+            if (g_terrain.method == METHOD_CS) {
+                if (ImGui::SliderInt("ComputeThreadCount", &g_terrain.computeThreadCount, 0, 8)) {
+                    loadSubdCsLodProgram();
+                    loadSubdCsBatchProgram();
+                    g_terrain.flags.reset = true;
+                }
             }
         }
         ImGui::End();

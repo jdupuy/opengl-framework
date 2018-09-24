@@ -1,6 +1,6 @@
 #line 1
 ////////////////////////////////////////////////////////////////////////////////
-// Implicit Subdivition Sahder for Terrain Rendering
+// Implicit Subdivision Sahder for Terrain Rendering
 //
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
@@ -42,9 +42,16 @@ struct Transform {
 };
 
 layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
-uniform Transforms {
+uniform SubdBufferCounter {
     Transform u_Transform;
 };
+
+#if 0
+layout(std140, binding = BUFFER_BINDING_SUBD_COUNTER)
+uniform Transforms {
+    uint u_SubdBufferInSize;
+};
+#endif
 
 uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
@@ -75,7 +82,7 @@ float distanceToLod(float z, float lodFactor)
  * buffer and visible buffer that will be sent to the rasterizer.
  */
 #ifdef COMPUTE_SHADER
-layout (local_size_x = 1,
+layout (local_size_x = COMPUTE_THREAD_COUNT,
         local_size_y = 1,
         local_size_z = 1) in;
 
@@ -130,6 +137,12 @@ void main()
 {
     // get threadID (each key is associated to a thread)
     int threadID = int(gl_GlobalInvocationID.x);
+
+#if 1
+    // early abort if the threadID exceeds the size of the subdivision buffer
+    if (threadID >= u_SubdBufferInSize)
+        return;
+#endif
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
