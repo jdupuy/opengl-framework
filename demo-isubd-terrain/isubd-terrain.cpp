@@ -161,8 +161,8 @@ enum {
 };
 enum {
     PROGRAM_VIEWER,
-    PROGRAM_SUBD_CS_LOD,    // compute-base pipeline only
-    PROGRAM_SUBD_CS_BATCH,  // compute-base pipeline only
+    PROGRAM_SUBD_CS_LOD,    // compute-based pipeline only
+    PROGRAM_SUBD_BATCH,     // compute-based && mes shader pipeline only
     PROGRAM_TERRAIN,
     PROGRAM_COUNT
 };
@@ -492,10 +492,10 @@ bool loadSubdCsLodProgram()
     return (glGetError() == GL_NO_ERROR);
 }
 
-bool loadSubdCsBatchProgram()
+bool loadSubdBatchProgram()
 {
     djg_program *djp = djgp_create();
-    GLuint *program = &g_gl.programs[PROGRAM_SUBD_CS_BATCH];
+    GLuint *program = &g_gl.programs[PROGRAM_SUBD_BATCH];
     char buf[1024];
 
     LOG("Loading {Compute-Batch-Program}\n");
@@ -531,7 +531,7 @@ bool loadPrograms()
     if (v) v&= loadViewerProgram();
     if (v) v&= loadTerrainProgram();
     if (v) v&= loadSubdCsLodProgram();
-    if (v) v&= loadSubdCsBatchProgram();
+    if (v) v&= loadSubdBatchProgram();
 
     return v;
 }
@@ -1363,7 +1363,7 @@ void renderSceneMs() {
 
         // update batch
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
-        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
 
         // delete dummy buffer
@@ -1392,7 +1392,7 @@ void renderSceneMs() {
         glDrawMeshTasksIndirectNV(offset);
 
         // update batch
-        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
 
         g_terrain.pingPong = 1 - g_terrain.pingPong;
@@ -1448,7 +1448,7 @@ void renderSceneCs() {
 
         // update batch
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
-        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
 
         // delete dummy buffer
@@ -1491,7 +1491,7 @@ void renderSceneCs() {
                                BUFFER_OFFSET(offset));
 
         // update batch
-        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
 
         g_terrain.pingPong = 1 - g_terrain.pingPong;
@@ -1700,7 +1700,7 @@ void renderGui(double cpuDt, double gpuDt)
                 sprintf(buf, "ComputeThreadCount (%02i)", 1 << g_terrain.computeThreadCount);
                 if (ImGui::SliderInt(buf, &g_terrain.computeThreadCount, 0, 8)) {
                     loadSubdCsLodProgram();
-                    loadSubdCsBatchProgram();
+                    loadSubdBatchProgram();
                     g_terrain.flags.reset = true;
                 }
             }
