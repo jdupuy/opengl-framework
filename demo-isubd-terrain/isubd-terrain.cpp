@@ -1374,8 +1374,7 @@ void renderSceneMs() {
         glDeleteBuffers(1, &dummyBuffer);
 
         g_terrain.flags.reset = false;
-    }
-    else {
+    } else {
         streamSubdCounterBuffer(&nextOffset);
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
