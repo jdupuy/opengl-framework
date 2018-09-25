@@ -136,11 +136,9 @@ void main()
     // get threadID (each key is associated to a thread)
     int threadID = int(gl_GlobalInvocationID.x);
 
-#if 1
     // early abort if the threadID exceeds the size of the subdivision buffer
     if (threadID >= u_PreviousSubdBufferCounter)
         return;
-#endif
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;

@@ -78,7 +78,7 @@ struct CameraManager {
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
-enum {METHOD_TS, METHOD_GS, METHOD_CS};
+enum {METHOD_TS, METHOD_GS, METHOD_CS, METHOD_MS};
 struct TerrainManager {
     struct {bool displace, cull, freeze, wire, reset;} flags;
     struct {
@@ -425,6 +425,11 @@ bool loadTerrainProgram()
         djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
 
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_render.glsl"));
+    } else if (g_terrain.method == METHOD_MS) {
+        djgp_push_string(djp,
+                         "#define COMPUTE_THREAD_COUNT %i\n",
+                         1 << g_terrain.computeThreadCount);
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ms.glsl"));
     }
 
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -935,6 +940,9 @@ union IndirectCommand {
                  baseInstance,
                  align[3];
     } drawElementsIndirect;
+    struct {
+        uint32_t count, first, align[6];
+    } drawMeshTasksIndirectCommandNV;
 };
 
 bool streamSubdCounterBuffer(int *bufferOffset = NULL)
@@ -950,6 +958,16 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
         djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
                          GL_ATOMIC_COUNTER_BUFFER,
                          STREAM_SUBD_COUNTER);
+    } else if (g_terrain.method == METHOD_MS) {
+        IndirectCommand drawMesh = { 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u };
+
+        // upload to GPU
+        djgb_to_gl(g_gl.streams[STREAM_SUBD_COUNTER],
+                   (const void *)&drawMesh,
+                   bufferOffset);
+        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
+            GL_ATOMIC_COUNTER_BUFFER,
+            STREAM_SUBD_COUNTER);
     } else {
         /* num_groups_x, num_groups_y, num_groups_z, align[5] */
         IndirectCommand dispatch = {0u, 1u, 1u, 0u, 0u, 0u, 0u, 0u};
@@ -1311,6 +1329,79 @@ void renderSceneGs() {
 }
 
 // -----------------------------------------------------------------------------
+void renderSceneMs() {
+    static int offset = 0;
+    int nextOffset = 0;
+
+    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
+
+    // render terrain
+    if (g_terrain.flags.reset) {
+        GLuint dummyBuffer;
+        GLint dummyBufferData = 2;
+
+        // create dummy buffer that makes sure we don't overflow
+        // the SubdBuffer in the compute shader
+        glGenBuffers(1, &dummyBuffer);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, dummyBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER,
+                     sizeof(dummyBufferData),
+                     &dummyBufferData,
+                     GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         STREAM_SUBD_COUNTER,
+                         dummyBuffer);
+
+        loadSubdivisionBuffers();
+        loadSubdCounterBuffers();
+        g_terrain.pingPong = 0;
+        offset = 0;
+
+        glDrawMeshTasksNV(0, 2);
+
+        // update batch
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glDispatchCompute(1, 1, 1);
+
+        // delete dummy buffer
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         STREAM_SUBD_COUNTER,
+                         0);
+        glDeleteBuffers(1, &dummyBuffer);
+
+        g_terrain.flags.reset = false;
+    }
+    else {
+        streamSubdCounterBuffer(&nextOffset);
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+            BUFFER_SUBD1,
+            g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+            BUFFER_SUBD2,
+            g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
+        djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
+                                GL_SHADER_STORAGE_BUFFER,
+                                STREAM_SUBD_COUNTER,
+                                -1);
+
+        glDrawMeshTasksIndirectNV(offset);
+
+        // update batch
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glDispatchCompute(1, 1, 1);
+
+        g_terrain.pingPong = 1 - g_terrain.pingPong;
+    }
+
+    offset = nextOffset;
+}
+
+// -----------------------------------------------------------------------------
 void renderSceneCs() {
     static int offset = 0;
     int nextOffset = 0;
@@ -1355,6 +1446,11 @@ void renderSceneCs() {
                                 BUFFER_OFFSET(0),
                                 2);
 
+        // update batch
+        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
+        glDispatchCompute(1, 1, 1);
+
         // delete dummy buffer
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
@@ -1395,8 +1491,6 @@ void renderSceneCs() {
                                BUFFER_OFFSET(offset));
 
         // update batch
-        djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER],
-                    GL_SHADER_STORAGE_BUFFER);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_BATCH]);
         glDispatchCompute(1, 1, 1);
 
@@ -1434,6 +1528,9 @@ void renderScene()
             break;
         case METHOD_CS:
             renderSceneCs();
+            break;
+        case METHOD_MS:
+            renderSceneMs();
             break;
         default:
             break;
@@ -1548,11 +1645,13 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::SetNextWindowSize(ImVec2(510, 190)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Terrain");
         {
-            const char* eMethods[] = {
+            std::vector<const char *> eMethods = {
                 "Tessellation Shader",
                 "Geometry Shader",
                 "Compute Shader"
             };
+            if (GLAD_GL_NV_mesh_shader)
+                eMethods.push_back("Mesh Shader");
             ImGui::Text("CPU_dt: %.3f %s",
                         cpuDt < 1. ? cpuDt * 1e3 : cpuDt,
                         cpuDt < 1. ? "ms" : " s");
@@ -1561,7 +1660,7 @@ void renderGui(double cpuDt, double gpuDt)
                         gpuDt < 1. ? gpuDt * 1e3 : gpuDt,
                         gpuDt < 1. ? "ms" : " s");
             //if (ImGui::Button("Load Displacement Map"));
-            if (ImGui::Combo("Method", &g_terrain.method, eMethods, BUFFER_SIZE(eMethods))) {
+            if (ImGui::Combo("Method", &g_terrain.method, &eMethods[0], eMethods.size())) {
                 loadTerrainProgram();
                 g_terrain.flags.reset = true;
             }
@@ -1595,7 +1694,7 @@ void renderGui(double cpuDt, double gpuDt)
             if (ImGui::SliderFloat("DmapScale", &g_terrain.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
             }
-            if (g_terrain.method == METHOD_CS) {
+            if (g_terrain.method == METHOD_CS || g_terrain.method == METHOD_MS) {
                 char buf[64];
 
                 sprintf(buf, "ComputeThreadCount (%02i)", 1 << g_terrain.computeThreadCount);
