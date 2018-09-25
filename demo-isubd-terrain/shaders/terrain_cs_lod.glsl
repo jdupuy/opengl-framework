@@ -46,12 +46,10 @@ uniform SubdBufferCounter {
     Transform u_Transform;
 };
 
-#if 0
 layout(std140, binding = BUFFER_BINDING_SUBD_COUNTER)
-uniform Transforms {
-    uint u_SubdBufferInSize;
+readonly buffer PreviousSubdBufferCounter {
+    uint u_PreviousSubdBufferCounter;
 };
-#endif
 
 uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
@@ -140,7 +138,7 @@ void main()
 
 #if 1
     // early abort if the threadID exceeds the size of the subdivision buffer
-    if (threadID >= u_SubdBufferInSize)
+    if (threadID >= u_PreviousSubdBufferCounter)
         return;
 #endif
 

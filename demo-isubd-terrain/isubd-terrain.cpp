@@ -66,7 +66,7 @@ struct CameraManager {
     dja::vec3 pos;           // 3D position
     dja::mat3 axis;          // 3D frame
 } g_camera = {
-    55.f, 0.001f, 1024.f,
+    55.f, 0.0001f, 32.f,
     INIT_POS,
     dja::mat3::lookat(
         dja::vec3(0.f, 0.f, 0.f),
@@ -95,7 +95,7 @@ struct TerrainManager {
     METHOD_TS, 0,
     3,
     0,
-    10.f
+    5.f
 };
 
 // -----------------------------------------------------------------------------
@@ -975,7 +975,7 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
     return (glGetError() == GL_NO_ERROR);
 }
 
-bool loadSubdCounterBuffer()
+bool loadSubdCounterBuffers()
 {
     LOG("Loading {Subd-Counter-Buffer}\n");
     if (g_gl.streams[STREAM_SUBD_COUNTER])
@@ -1003,7 +1003,7 @@ bool loadBuffers()
     if (v) v&= loadGeometryBuffers();
     if (v) v&= loadInstancedGeometryBuffers();
     if (v) v&= loadSubdivisionBuffers();
-    if (v) v&= loadSubdCounterBuffer();
+    if (v) v&= loadSubdCounterBuffers();
 
     return v;
 }
@@ -1249,11 +1249,10 @@ void renderSceneTs() {
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
     djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
 
-
     // render terrain
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
-        loadSubdCounterBuffer();
+        loadSubdCounterBuffers();
         g_terrain.pingPong = 0;
         offset = 0;
 
@@ -1288,7 +1287,7 @@ void renderSceneGs() {
     // render terrain
     if (g_terrain.flags.reset) {
         loadSubdivisionBuffers();
-        loadSubdCounterBuffer();
+        loadSubdCounterBuffers();
         g_terrain.pingPong = 0;
         offset = 0;
 
@@ -1323,8 +1322,23 @@ void renderSceneCs() {
 
     // update the subd buffers
     if (g_terrain.flags.reset) {
+        GLuint dummyBuffer;
+        GLint dummyBufferData = 2;
+
+        // create dummy buffer that makes sure we don't overflow
+        // the SubdBuffer in the compute shader
+        glGenBuffers(1, &dummyBuffer);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, dummyBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER,
+                     sizeof(dummyBufferData),
+                     &dummyBufferData,
+                     GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         STREAM_SUBD_COUNTER,
+                         dummyBuffer);
+
         loadSubdivisionBuffers();
-        loadSubdCounterBuffer();
+        loadSubdCounterBuffers();
         g_terrain.pingPong = 0;
         offset = 0;
 
@@ -1340,6 +1354,13 @@ void renderSceneCs() {
                                 GL_UNSIGNED_INT,
                                 BUFFER_OFFSET(0),
                                 2);
+
+        // delete dummy buffer
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         STREAM_SUBD_COUNTER,
+                         0);
+        glDeleteBuffers(1, &dummyBuffer);
 
         g_terrain.flags.reset = false;
     } else {
@@ -1358,6 +1379,10 @@ void renderSceneCs() {
                          g_gl.buffers[BUFFER_CULLED_SUBD1 + g_terrain.pingPong]);
 
         // update the subd buffer
+        djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
+                                GL_SHADER_STORAGE_BUFFER,
+                                STREAM_SUBD_COUNTER,
+                                -1);
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
         glDispatchComputeIndirect(offset);
@@ -1508,11 +1533,11 @@ void renderGui(double cpuDt, double gpuDt)
             if (ImGui::SliderFloat("FOVY", &g_camera.fovy, 1.0f, 179.0f)) {
                 configureTerrainProgram();
             }
-            if (ImGui::SliderFloat("zNear", &g_camera.zNear, 0.01f, 100.f)) {
+            if (ImGui::SliderFloat("zNear", &g_camera.zNear, 0.0001f, 1.f)) {
                 if (g_camera.zNear >= g_camera.zFar)
                     g_camera.zNear = g_camera.zFar - 0.01f;
             }
-            if (ImGui::SliderFloat("zFar", &g_camera.zFar, 1.f, 1500.f)) {
+            if (ImGui::SliderFloat("zFar", &g_camera.zFar, 1.f, 32.f)) {
                 if (g_camera.zFar <= g_camera.zNear)
                     g_camera.zFar = g_camera.zNear + 0.01f;
             }
@@ -1571,7 +1596,10 @@ void renderGui(double cpuDt, double gpuDt)
                 configureTerrainProgram();
             }
             if (g_terrain.method == METHOD_CS) {
-                if (ImGui::SliderInt("ComputeThreadCount", &g_terrain.computeThreadCount, 0, 8)) {
+                char buf[64];
+
+                sprintf(buf, "ComputeThreadCount (%02i)", 1 << g_terrain.computeThreadCount);
+                if (ImGui::SliderInt(buf, &g_terrain.computeThreadCount, 0, 8)) {
                     loadSubdCsLodProgram();
                     loadSubdCsBatchProgram();
                     g_terrain.flags.reset = true;
