@@ -92,7 +92,7 @@ struct TerrainManager {
 } g_terrain = {
     {false, true, false, false, true},
     {std::string(), 0.3f},
-    METHOD_TS, 0,
+    METHOD_TS, 5,
     3,
     0,
     5.f
@@ -1588,7 +1588,7 @@ void renderGui(double cpuDt, double gpuDt)
                 loadInstancedGeometryVertexArray();
                 g_terrain.flags.reset = true;
             }
-            if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 64)) {
+            if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 24)) {
                 configureTerrainProgram();
                 configureSubdCsLodProgram();
             }
