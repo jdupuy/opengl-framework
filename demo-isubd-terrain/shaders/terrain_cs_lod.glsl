@@ -1,4 +1,5 @@
 #line 1
+
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivision Sahder for Terrain Rendering
 //
@@ -31,6 +32,9 @@ readonly buffer IndexBuffer {
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
+layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
+uniform atomic_uint u_PreviousSubdBufferCounter;
+
 layout (binding = BUFFER_BINDING_CULLED_SUBD_COUNTER)
 uniform atomic_uint u_CulledSubdBufferCounter[2];
 
@@ -42,13 +46,8 @@ struct Transform {
 };
 
 layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
-uniform SubdBufferCounter {
+uniform TransformBuffer {
     Transform u_Transform;
-};
-
-layout(std140, binding = BUFFER_BINDING_SUBD_COUNTER)
-readonly buffer PreviousSubdBufferCounter {
-    uint u_PreviousSubdBufferCounter;
 };
 
 uniform sampler2D u_DmapSampler;
@@ -134,10 +133,10 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 void main()
 {
     // get threadID (each key is associated to a thread)
-    int threadID = int(gl_GlobalInvocationID.x);
+    uint threadID = gl_GlobalInvocationID.x;
 
     // early abort if the threadID exceeds the size of the subdivision buffer
-    if (threadID >= u_PreviousSubdBufferCounter)
+    if (threadID >= atomicCounter(u_PreviousSubdBufferCounter))
         return;
 
     // get coarse triangle associated to the key

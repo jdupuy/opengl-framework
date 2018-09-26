@@ -92,7 +92,7 @@ struct TerrainManager {
 } g_terrain = {
     {false, true, false, false, true},
     {std::string(), 0.3f},
-    METHOD_TS, 5,
+    METHOD_CS, 5,
     3,
     0,
     5.f
@@ -135,7 +135,8 @@ enum { FRAMEBUFFER_BACK, FRAMEBUFFER_SCENE, FRAMEBUFFER_COUNT };
 enum {
     STREAM_TRANSFORM,
     STREAM_SUBD_COUNTER,
-    STREAM_CULLED_SUBD_COUNTER, // compute-based pipeline only
+    STREAM_SUBD_COUNTER_PREVIOUS, // compute-based pipeline only
+    STREAM_CULLED_SUBD_COUNTER,   // compute-based pipeline only
     STREAM_COUNT
 };
 enum {
@@ -157,12 +158,13 @@ enum {
     BUFFER_CULLED_SUBD1, BUFFER_CULLED_SUBD2,   // compute-based pipeline only
     BUFFER_INSTANCED_GEOMETRY_VERTICES,         // compute-based pipeline only
     BUFFER_INSTANCED_GEOMETRY_INDEXES,          // compute-based pipeline only
+    BUFFER_DISPATCH_INDIRECT,                   // compute-based pipeline only
     BUFFER_COUNT
 };
 enum {
     PROGRAM_VIEWER,
     PROGRAM_SUBD_CS_LOD,    // compute-based pipeline only
-    PROGRAM_SUBD_BATCH,     // compute-based && mes shader pipeline only
+    PROGRAM_SUBD_BATCH,     // compute-based shader pipeline only
     PROGRAM_TERRAIN,
     PROGRAM_COUNT
 };
@@ -427,6 +429,9 @@ bool loadTerrainProgram()
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_render.glsl"));
     } else if (g_terrain.method == METHOD_MS) {
         djgp_push_string(djp,
+                         "#define BUFFER_BINDING_SUBD_COUNTER_PREVIOUS %i\n",
+                         STREAM_SUBD_COUNTER_PREVIOUS);
+        djgp_push_string(djp,
                          "#define COMPUTE_THREAD_COUNT %i\n",
                          1 << g_terrain.computeThreadCount);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ms.glsl"));
@@ -463,10 +468,13 @@ bool loadSubdCsLodProgram()
 
     djgp_push_string(djp,
                      "#define COMPUTE_THREAD_COUNT %i\n",
-                     1 << g_terrain.computeThreadCount);
+                     1u << g_terrain.computeThreadCount);
     djgp_push_string(djp,
                      "#define BUFFER_BINDING_CULLED_SUBD %i\n",
                      BUFFER_CULLED_SUBD2);
+    djgp_push_string(djp,
+                     "#define BUFFER_BINDING_SUBD_COUNTER_PREVIOUS %i\n",
+                     STREAM_SUBD_COUNTER_PREVIOUS);
     djgp_push_string(djp,
                      "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n",
                      STREAM_CULLED_SUBD_COUNTER);
@@ -500,12 +508,24 @@ bool loadSubdBatchProgram()
 
     LOG("Loading {Compute-Batch-Program}\n");
 
-    djgp_push_string(djp,
-                     "#define COMPUTE_THREAD_COUNT %i\n",
-                     1 << g_terrain.computeThreadCount);
+    if (g_terrain.method == METHOD_CS) {
+        djgp_push_string(djp, "#define FLAG_COMPUTE_PATH 1\n");
+        djgp_push_string(djp,
+                         "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
+                         BUFFER_DISPATCH_INDIRECT);
+    } else if (g_terrain.method == METHOD_MS) {
+        djgp_push_string(djp, "#define FLAG_MESH_PATH 1\n");
+        djgp_push_string(djp,
+                         "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
+                         STREAM_SUBD_COUNTER);
+    }
+
     djgp_push_string(djp,
                      "#define BUFFER_BINDING_SUBD_COUNTER %i\n",
                      STREAM_SUBD_COUNTER);
+    djgp_push_string(djp,
+                     "#define COMPUTE_THREAD_COUNT %i\n",
+                     1 << g_terrain.computeThreadCount);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_batch.glsl"));
 
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -970,6 +990,10 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
         djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
             GL_ATOMIC_COUNTER_BUFFER,
             STREAM_SUBD_COUNTER);
+        djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
+                                GL_ATOMIC_COUNTER_BUFFER,
+                                STREAM_SUBD_COUNTER_PREVIOUS,
+                                -1);
     } else {
         /* num_groups_x, num_groups_y, num_groups_z, align[5] */
         IndirectCommand dispatch = {0u, 1u, 1u, 0u, 0u, 0u, 0u, 0u};
@@ -987,6 +1011,10 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
         djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
                          GL_ATOMIC_COUNTER_BUFFER,
                          STREAM_SUBD_COUNTER);
+        djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
+                                GL_ATOMIC_COUNTER_BUFFER,
+                                STREAM_SUBD_COUNTER_PREVIOUS,
+                                -1);
         djgb_glbindrange(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
                          GL_ATOMIC_COUNTER_BUFFER,
                          STREAM_CULLED_SUBD_COUNTER);
@@ -1008,7 +1036,6 @@ bool loadSubdCounterBuffers()
 
     return streamSubdCounterBuffer();
 }
-
 
 // -----------------------------------------------------------------------------
 /**
@@ -1347,25 +1374,26 @@ void renderSceneMs() {
         // create dummy buffer that makes sure we don't overflow
         // the SubdBuffer in the compute shader
         glGenBuffers(1, &dummyBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, dummyBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER,
+        glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, dummyBuffer);
+        glBufferData(GL_ATOMIC_COUNTER_BUFFER,
                      sizeof(dummyBufferData),
                      &dummyBufferData,
                      GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-                         STREAM_SUBD_COUNTER,
-                         dummyBuffer);
 
         loadSubdivisionBuffers();
         loadSubdCounterBuffers();
         g_terrain.pingPong = 0;
         offset = 0;
 
+        // launch kernel
         glDrawMeshTasksNV(0, 2);
 
         // update batch
         glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
+        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
+                         GL_SHADER_STORAGE_BUFFER,
+                         STREAM_SUBD_COUNTER);
         glDispatchCompute(1, 1, 1);
 
         // delete dummy buffer
@@ -1385,14 +1413,15 @@ void renderSceneMs() {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
             BUFFER_SUBD2,
             g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
-        djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
-                                GL_SHADER_STORAGE_BUFFER,
-                                STREAM_SUBD_COUNTER,
-                                -1);
 
+        // draw terrain
         glDrawMeshTasksIndirectNV(offset);
 
         // update batch
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
+                         GL_SHADER_STORAGE_BUFFER,
+                         STREAM_SUBD_COUNTER);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
 
@@ -1407,27 +1436,35 @@ void renderSceneCs() {
     static int offset = 0;
     int nextOffset = 0;
 
-    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER],
-                GL_DISPATCH_INDIRECT_BUFFER);
-    djgb_glbind(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
-                GL_DRAW_INDIRECT_BUFFER);
-
     // update the subd buffers
     if (g_terrain.flags.reset) {
         GLuint dummyBuffer;
-        GLint dummyBufferData = 2;
+        GLuint dummyBufferData = 2u;
+        IndirectCommand cmd = {
+            2u / (1u << g_terrain.computeThreadCount) + 1u,
+            1u, 1u, 0u, 0u, 0u, 0u, 0u
+        };
 
         // create dummy buffer that makes sure we don't overflow
         // the SubdBuffer in the compute shader
         glGenBuffers(1, &dummyBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, dummyBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER,
+        glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, dummyBuffer);
+        glBufferData(GL_ATOMIC_COUNTER_BUFFER,
                      sizeof(dummyBufferData),
                      &dummyBufferData,
                      GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-                         STREAM_SUBD_COUNTER,
-                         dummyBuffer);
+
+        // create indirect dispatch buffer
+        if (!glIsBuffer(g_gl.buffers[BUFFER_DISPATCH_INDIRECT]))
+            glGenBuffers(1, &g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER,
+                     g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        glBufferData(GL_DISPATCH_INDIRECT_BUFFER,
+                     sizeof(cmd),
+                     &cmd,
+                     GL_STATIC_DRAW);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER,
+                     0);
 
         loadSubdivisionBuffers();
         loadSubdCounterBuffers();
@@ -1435,8 +1472,13 @@ void renderSceneCs() {
         offset = 0;
 
         // update the subd buffer
+        glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
+                         STREAM_SUBD_COUNTER_PREVIOUS,
+                         dummyBuffer);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER,
+                     g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
-        glDispatchCompute(2, 1, 1);
+        glDispatchComputeIndirect(0);
 
         // render the terrain
         glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
@@ -1448,9 +1490,13 @@ void renderSceneCs() {
                                 2);
 
         // update batch
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_DISPATCH_INDIRECT,
+                         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
         // delete dummy buffer
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -1476,24 +1522,30 @@ void renderSceneCs() {
                          g_gl.buffers[BUFFER_CULLED_SUBD1 + g_terrain.pingPong]);
 
         // update the subd buffer
-        djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
-                                GL_SHADER_STORAGE_BUFFER,
-                                STREAM_SUBD_COUNTER,
-                                -1);
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER,
+                     g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_CS_LOD]);
-        glDispatchComputeIndirect(offset);
+        glDispatchComputeIndirect(0);
 
         // render the terrain
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
         glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
+        djgb_glbind(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
+                    GL_DRAW_INDIRECT_BUFFER);
         glDrawElementsIndirect(GL_TRIANGLES,
                                GL_UNSIGNED_INT,
                                BUFFER_OFFSET(offset));
 
         // update batch
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_DISPATCH_INDIRECT,
+                         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
         g_terrain.pingPong = 1 - g_terrain.pingPong;
     }
@@ -1558,7 +1610,7 @@ void imguiSetAa()
         throw std::exception();
     }
 }
-
+#include "ImguiWindowsFileIO.hpp"
 void renderGui(double cpuDt, double gpuDt)
 {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_gl.framebuffers[FRAMEBUFFER_BACK]);
@@ -1700,8 +1752,7 @@ void renderGui(double cpuDt, double gpuDt)
 
                 sprintf(buf, "ComputeThreadCount (%02i)", 1 << g_terrain.computeThreadCount);
                 if (ImGui::SliderInt(buf, &g_terrain.computeThreadCount, 0, 8)) {
-                    loadSubdCsLodProgram();
-                    loadSubdBatchProgram();
+                    loadPrograms();
                     g_terrain.flags.reset = true;
                 }
             }

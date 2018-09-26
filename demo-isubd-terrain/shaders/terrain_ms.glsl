@@ -1,6 +1,5 @@
 #line 2
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Sahder for Terrain Rendering
 //
@@ -27,6 +26,9 @@ readonly buffer IndexBuffer {
 
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
+
+layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
+uniform atomic_uint u_PreviousSubdBufferCounter;
 
 struct Transform {
     mat4 modelView;
@@ -66,24 +68,6 @@ float distanceToLod(float z, float lodFactor)
     return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
-float computeLod(vec3 c)
-{
-#if FLAG_DISPLACE
-    c.z+= dmap(u_Transform.viewInv[3].xy);
-#endif
-
-    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
-    float z = length(cxf);
-
-    return distanceToLod(z, u_LodFactor);
-}
-
-float computeLod(in vec3 v[3])
-{
-    vec3 c = (v[1] + v[2]) / 2.0;
-    return computeLod(c);
-}
-
 // -----------------------------------------------------------------------------
 /**
  * Task Shader
@@ -98,6 +82,24 @@ taskNV out Patch {
     vec4 vertices[3];
     uint key;
 } o_Patch;
+
+float computeLod(vec3 c)
+{
+#if FLAG_DISPLACE
+    c.z += dmap(u_Transform.viewInv[3].xy);
+#endif
+
+    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
+    float z = length(cxf);
+
+    return distanceToLod(z, u_LodFactor);
+}
+
+float computeLod(in vec4 v[3])
+{
+    vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
+    return computeLod(c);
+}
 
 void writeKey(uint primID, uint key)
 {
@@ -132,7 +134,12 @@ void main()
 {
 #if 1
     // get threadID (each key is associated to a thread)
+#if 1
     int threadID = int(gl_GlobalInvocationID.x);
+#else
+    int threadID = int(gl_WorkGroupID.x * COMPUTE_THREAD_COUNT + gl_LocalInvocationID.x);
+    threadID = 1;
+#endif
 
     // early abort if the threadID exceeds the size of the subdivision buffer
     if (threadID >= u_PreviousSubdBufferCounter)
@@ -140,15 +147,15 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
-    vec3 v_in[3] = vec3[3](
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3    ]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]].xyz),
-        vec3(u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]].xyz)
+    vec4 v_in[3] = vec4[3](
+        u_VertexBuffer[u_IndexBuffer[primID * 3]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
     );
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec3 v[3], vp[3]; subd(key, v_in, v, vp);
+    vec4 v[3], vp[3]; subd(key, v_in, v, vp);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -156,11 +163,11 @@ void main()
 #endif
     updateSubdBuffer(primID, key, targetLod, parentLod);
 
-#if 0 //FLAG_CULL
+#if 0//FLAG_CULL
     // Cull invisible nodes
     mat4 mvp = u_Transform.modelViewProjection;
-    vec3 bmin = min(min(v[0], v[1]), v[2]);
-    vec3 bmax = max(max(v[0], v[1]), v[2]);
+    vec4 bmin = min(min(v[0], v[1]), v[2]);
+    vec4 bmax = max(max(v[0], v[1]), v[2]);
 
     // account for displacement in bound computations
 #   if FLAG_DISPLACE
@@ -168,15 +175,14 @@ void main()
     bmax.z = u_DmapFactor;
 #   endif
 
-    if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
+    if (/* is visible ? */frustumCullingTest(mvp, bmin.xyz, bmax.xyz)) {
 #else
     if (true) {
 #endif // FLAG_CULL
-        
+
         // set output data
-        //o_Patch.vertices = v;
+        o_Patch.vertices = v;
         o_Patch.key = key;
-        o_Patch.vertices = vec4[3](vec4(v[0], 1), vec4(v[1], 1), vec4(v[2], 1));
 
         gl_TaskCountNV = 1;
     } else {
@@ -196,7 +202,7 @@ void main()
 #ifdef MESH_SHADER
 #line 1
 
-layout(local_size_x = COMPUTE_THREAD_COUNT) in;
+layout(local_size_x = 1) in;
 layout(max_vertices = 32, max_primitives = 32) out;
 layout(triangles) out;
 
@@ -292,14 +298,14 @@ void main()
 #ifdef FRAGMENT_SHADER
 //layout(location = 0) in vec2 i_TexCoord;
 layout(location = 0) in Interpolants {
-    vec2 texCoord;
-} i_Data;
+    vec2 o_TexCoord;
+} IN;
 
 layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    vec2 i_TexCoord = i_Data.texCoord;
+    vec2 i_TexCoord = IN.o_TexCoord;
 
     vec3 c[3] = vec3[3](vec3(0.0,1.0,1.0)/4.0,
                         vec3(0.86,0.00,0.00),
