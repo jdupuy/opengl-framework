@@ -133,69 +133,69 @@ void main()
     // get threadID (each key is associated to a thread)
     uint threadID = gl_GlobalInvocationID.x;
 
-	bool isVisible = true;
-	
-	uint key; vec4 v[3];
+    bool isVisible = true;
+
+    uint key; vec4 v[3];
 
     // early abort if the threadID exceeds the size of the subdivision buffer
-	if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) {
-		gl_TaskCountNV = 0;	//Removes last processed triangle
+    if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) {
+        gl_TaskCountNV = 0;    //Removes last processed triangle
 
-		isVisible = false;
-		//return;
-	}
-	else {
+        isVisible = false;
+        //return;
+    }
+    else {
 
-		// get coarse triangle associated to the key
-		uint primID = u_SubdBufferIn[threadID].x;
-		vec4 v_in[3] = vec4[3](
-			u_VertexBuffer[u_IndexBuffer[primID * 3]],
-			u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
-			u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
-			);
+        // get coarse triangle associated to the key
+        uint primID = u_SubdBufferIn[threadID].x;
+        vec4 v_in[3] = vec4[3](
+            u_VertexBuffer[u_IndexBuffer[primID * 3]],
+            u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
+            u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
+            );
 
-		// compute distance-based LOD
-		key = u_SubdBufferIn[threadID].y;
-		vec4 vp[3]; subd(key, v_in, v, vp);
-		int targetLod = int(computeLod(v));
-		int parentLod = int(computeLod(vp));
+        // compute distance-based LOD
+        key = u_SubdBufferIn[threadID].y;
+        vec4 vp[3]; subd(key, v_in, v, vp);
+        int targetLod = int(computeLod(v));
+        int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
-		targetLod = parentLod = findMSB(key);
+        targetLod = parentLod = findMSB(key);
 #endif
-		updateSubdBuffer(primID, key, targetLod, parentLod);
+        updateSubdBuffer(primID, key, targetLod, parentLod);
 
 
 #if FLAG_CULL
-		// Cull invisible nodes
-		mat4 mvp = u_Transform.modelViewProjection;
-		vec4 bmin = min(min(v[0], v[1]), v[2]);
-		vec4 bmax = max(max(v[0], v[1]), v[2]);
+        // Cull invisible nodes
+        mat4 mvp = u_Transform.modelViewProjection;
+        vec4 bmin = min(min(v[0], v[1]), v[2]);
+        vec4 bmax = max(max(v[0], v[1]), v[2]);
 
-		// account for displacement in bound computations
+        // account for displacement in bound computations
 #   if FLAG_DISPLACE
-		bmin.z = 0;
-		bmax.z = u_DmapFactor;
+        bmin.z = 0;
+        bmax.z = u_DmapFactor;
 #   endif
 
-		isVisible = frustumCullingTest(mvp, bmin.xyz, bmax.xyz);
+        isVisible = frustumCullingTest(mvp, bmin.xyz, bmax.xyz);
 #endif // FLAG_CULL
 
 
 
-	}
+    }
 
-	uint laneID = gl_LocalInvocationID.x;
+    uint laneID = gl_LocalInvocationID.x;
 
-	uint voteVisible = ballotThreadNV(isVisible);
-	uint numTasks = bitCount(voteVisible);
+    uint voteVisible = ballotThreadNV(isVisible);
+    uint numTasks = bitCount(voteVisible);
 
-	if (laneID == 0) {
-		gl_TaskCountNV = numTasks;
-	}
+    if (laneID == 0) {
+        gl_TaskCountNV = numTasks;
+    }
 
 
-	if (isVisible) {
-		uint idxOffset = bitCount(voteVisible & gl_ThreadLtMaskNV);
+    if (isVisible) {
+        uint idxOffset = bitCount(voteVisible & gl_ThreadLtMaskNV);
 
         // set output data
         o_Patch[idxOffset].vertices = v;
@@ -203,8 +203,8 @@ void main()
 
        
 
-		//if(gl_LocalInvocationID.x == 1)
-		//	gl_TaskCountNV = 0;
+        //if(gl_LocalInvocationID.x == 1)
+        //    gl_TaskCountNV = 0;
 
     } 
 
@@ -240,14 +240,14 @@ void main()
 {
 #line 242
 #define NUM_CLIPPING_PLANES 6
-	//int id = int(gl_LocalInvocationID.x);
-	int id = int(gl_WorkGroupID.x);
+    //int id = int(gl_LocalInvocationID.x);
+    int id = int(gl_WorkGroupID.x);
 
     vec3 v[3] = vec3[3](
-		i_Patch[id].vertices[0].xyz,
-		i_Patch[id].vertices[1].xyz,
-		i_Patch[id].vertices[2].xyz
-		);
+        i_Patch[id].vertices[0].xyz,
+        i_Patch[id].vertices[1].xyz,
+        i_Patch[id].vertices[2].xyz
+        );
     //v = vec3[3](vec3(0), vec3(1,0,0), vec3(0,1,0));
 
     gl_PrimitiveCountNV = 1;
@@ -260,8 +260,8 @@ void main()
         vec2 uv = vec2(vert & 1, vert >> 1 & 1);
         vec3 finalVertex = berp(v, uv);
 
-		//int idx = 3 * id + vert;
-		int idx = vert;
+        //int idx = 3 * id + vert;
+        int idx = vert;
 
         //gl_MeshVerticesNV[vert].gl_Position = vec4(uv, 0.0, 1.0);
         gl_MeshVerticesNV[idx].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
