@@ -1610,7 +1610,7 @@ void imguiSetAa()
         throw std::exception();
     }
 }
-#include "ImguiWindowsFileIO.hpp"
+
 void renderGui(double cpuDt, double gpuDt)
 {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_gl.framebuffers[FRAMEBUFFER_BACK]);
