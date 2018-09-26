@@ -941,7 +941,9 @@ union IndirectCommand {
                  align[3];
     } drawElementsIndirect;
     struct {
-        uint32_t count, first, align[6];
+        uint32_t count,
+                 first,
+                 align[6];
     } drawMeshTasksIndirectCommandNV;
 };
 
@@ -1686,7 +1688,7 @@ void renderGui(double cpuDt, double gpuDt)
                 loadInstancedGeometryVertexArray();
                 g_terrain.flags.reset = true;
             }
-            if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 24)) {
+            if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 16)) {
                 configureTerrainProgram();
                 configureSubdCsLodProgram();
             }
