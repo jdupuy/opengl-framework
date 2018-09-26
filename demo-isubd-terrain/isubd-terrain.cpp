@@ -376,7 +376,7 @@ bool loadViewerProgram()
  * Load the Terrain Program
  *
  * This program renders an adaptive terrain using the implicit subdivision
- * technique discribed in XXX.
+ * technique discribed in GPU Zen 2.
  */
 void setupSubdKernel(djg_program *djp)
 {
@@ -409,6 +409,11 @@ bool loadTerrainProgram()
     char buf[1024];
 
     LOG("Loading {Terrain-Program}\n");
+    if (g_terrain.method == METHOD_MS) {
+        djgp_push_string(djp, "#extension GL_NV_mesh_shader : require\n");
+        djgp_push_string(djp, "#extension GL_NV_shader_thread_group : require\n");
+        djgp_push_string(djp, "#extension GL_NV_shader_thread_shuffle : require\n");
+    }
     setupSubdKernel(djp);
 
     if (g_terrain.method == METHOD_TS) {
@@ -517,7 +522,7 @@ bool loadSubdBatchProgram()
         djgp_push_string(djp, "#define FLAG_MESH_PATH 1\n");
         djgp_push_string(djp,
                          "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
-                         STREAM_SUBD_COUNTER);
+                          BUFFER_DISPATCH_INDIRECT);
     }
 
     djgp_push_string(djp,
@@ -988,8 +993,8 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
                    (const void *)&drawMesh,
                    bufferOffset);
         djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
-            GL_ATOMIC_COUNTER_BUFFER,
-            STREAM_SUBD_COUNTER);
+                         GL_ATOMIC_COUNTER_BUFFER,
+                         STREAM_SUBD_COUNTER);
         djgb_glbindrange_offset(g_gl.streams[STREAM_SUBD_COUNTER],
                                 GL_ATOMIC_COUNTER_BUFFER,
                                 STREAM_SUBD_COUNTER_PREVIOUS,
@@ -1362,14 +1367,16 @@ void renderSceneMs() {
     static int offset = 0;
     int nextOffset = 0;
 
-    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
-    djgb_glbind(g_gl.streams[STREAM_SUBD_COUNTER], GL_DRAW_INDIRECT_BUFFER);
 
     // render terrain
     if (g_terrain.flags.reset) {
         GLuint dummyBuffer;
         GLint dummyBufferData = 2;
+        IndirectCommand cmd = {
+            2u / (1u << g_terrain.computeThreadCount) + 1u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u
+        };
 
         // create dummy buffer that makes sure we don't overflow
         // the SubdBuffer in the compute shader
@@ -1380,20 +1387,37 @@ void renderSceneMs() {
                      &dummyBufferData,
                      GL_STATIC_DRAW);
 
+        // create indirect dispatch buffer
+        if (!glIsBuffer(g_gl.buffers[BUFFER_DISPATCH_INDIRECT]))
+            glGenBuffers(1, &g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER,
+                     g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        glBufferData(GL_DRAW_INDIRECT_BUFFER,
+                     sizeof(cmd),
+                     &cmd,
+                     GL_STATIC_DRAW);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+
         loadSubdivisionBuffers();
         loadSubdCounterBuffers();
         g_terrain.pingPong = 0;
         offset = 0;
 
         // launch kernel
-        glDrawMeshTasksNV(0, 2);
+        glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+        glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
+                         STREAM_SUBD_COUNTER_PREVIOUS,
+                         dummyBuffer);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER,
+                     g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        glDrawMeshTasksIndirectNV(0);
 
         // update batch
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
-        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
-                         GL_SHADER_STORAGE_BUFFER,
-                         STREAM_SUBD_COUNTER);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_DISPATCH_INDIRECT,
+                         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
         glDispatchCompute(1, 1, 1);
 
         // delete dummy buffer
@@ -1406,7 +1430,7 @@ void renderSceneMs() {
         g_terrain.flags.reset = false;
     } else {
         streamSubdCounterBuffer(&nextOffset);
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
             BUFFER_SUBD1,
             g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
@@ -1415,13 +1439,16 @@ void renderSceneMs() {
             g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
 
         // draw terrain
-        glDrawMeshTasksIndirectNV(offset);
+        glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER,
+                     g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        glDrawMeshTasksIndirectNV(0);
 
         // update batch
         glMemoryBarrier(GL_ALL_BARRIER_BITS);
-        djgb_glbindrange(g_gl.streams[STREAM_SUBD_COUNTER],
-                         GL_SHADER_STORAGE_BUFFER,
-                         STREAM_SUBD_COUNTER);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                         BUFFER_DISPATCH_INDIRECT,
+                         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
         glUseProgram(g_gl.programs[PROGRAM_SUBD_BATCH]);
         glDispatchCompute(1, 1, 1);
 

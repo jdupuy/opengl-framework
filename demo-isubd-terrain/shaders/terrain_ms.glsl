@@ -1,5 +1,7 @@
 #line 2
 
+//#undef COMPUTE_THREAD_COUNT
+//#define COMPUTE_THREAD_COUNT 1
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Sahder for Terrain Rendering
 //
@@ -42,11 +44,6 @@ uniform Transforms {
     Transform u_Transform;
 };
 
-layout(std140, binding = BUFFER_BINDING_SUBD_COUNTER)
-readonly buffer PreviousSubdBufferCounter {
-    uint u_PreviousSubdBufferCounter;
-};
-
 uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
@@ -81,7 +78,7 @@ layout(local_size_x = COMPUTE_THREAD_COUNT) in;
 taskNV out Patch {
     vec4 vertices[3];
     uint key;
-} o_Patch;
+} o_Patch[COMPUTE_THREAD_COUNT];
 
 float computeLod(vec3 c)
 {
@@ -132,63 +129,85 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 
 void main()
 {
-#if 1
+
     // get threadID (each key is associated to a thread)
-#if 1
-    int threadID = int(gl_GlobalInvocationID.x);
-#else
-    int threadID = int(gl_WorkGroupID.x * COMPUTE_THREAD_COUNT + gl_LocalInvocationID.x);
-    threadID = 1;
-#endif
+    uint threadID = gl_GlobalInvocationID.x;
+
+	bool isVisible = true;
+	
+	uint key; vec4 v[3];
 
     // early abort if the threadID exceeds the size of the subdivision buffer
-    if (threadID >= u_PreviousSubdBufferCounter)
-        return;
+	if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) {
+		gl_TaskCountNV = 0;	//Removes last processed triangle
 
-    // get coarse triangle associated to the key
-    uint primID = u_SubdBufferIn[threadID].x;
-    vec4 v_in[3] = vec4[3](
-        u_VertexBuffer[u_IndexBuffer[primID * 3]],
-        u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
-        u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
-    );
+		isVisible = false;
+		//return;
+	}
+	else {
 
-    // compute distance-based LOD
-    uint key = u_SubdBufferIn[threadID].y;
-    vec4 v[3], vp[3]; subd(key, v_in, v, vp);
-    int targetLod = int(computeLod(v));
-    int parentLod = int(computeLod(vp));
+		// get coarse triangle associated to the key
+		uint primID = u_SubdBufferIn[threadID].x;
+		vec4 v_in[3] = vec4[3](
+			u_VertexBuffer[u_IndexBuffer[primID * 3]],
+			u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
+			u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
+			);
+
+		// compute distance-based LOD
+		key = u_SubdBufferIn[threadID].y;
+		vec4 vp[3]; subd(key, v_in, v, vp);
+		int targetLod = int(computeLod(v));
+		int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
-    targetLod = parentLod = findMSB(key);
+		targetLod = parentLod = findMSB(key);
 #endif
-    updateSubdBuffer(primID, key, targetLod, parentLod);
+		updateSubdBuffer(primID, key, targetLod, parentLod);
 
-#if 0//FLAG_CULL
-    // Cull invisible nodes
-    mat4 mvp = u_Transform.modelViewProjection;
-    vec4 bmin = min(min(v[0], v[1]), v[2]);
-    vec4 bmax = max(max(v[0], v[1]), v[2]);
 
-    // account for displacement in bound computations
+#if FLAG_CULL
+		// Cull invisible nodes
+		mat4 mvp = u_Transform.modelViewProjection;
+		vec4 bmin = min(min(v[0], v[1]), v[2]);
+		vec4 bmax = max(max(v[0], v[1]), v[2]);
+
+		// account for displacement in bound computations
 #   if FLAG_DISPLACE
-    bmin.z = 0;
-    bmax.z = u_DmapFactor;
+		bmin.z = 0;
+		bmax.z = u_DmapFactor;
 #   endif
 
-    if (/* is visible ? */frustumCullingTest(mvp, bmin.xyz, bmax.xyz)) {
-#else
-    if (true) {
+		isVisible = frustumCullingTest(mvp, bmin.xyz, bmax.xyz);
 #endif // FLAG_CULL
 
-        // set output data
-        o_Patch.vertices = v;
-        o_Patch.key = key;
 
-        gl_TaskCountNV = 1;
-    } else {
-        gl_TaskCountNV = 0;
-    }
-#endif
+
+	}
+
+	uint laneID = gl_LocalInvocationID.x;
+
+	uint voteVisible = ballotThreadNV(isVisible);
+	uint numTasks = bitCount(voteVisible);
+
+	if (laneID == 0) {
+		gl_TaskCountNV = numTasks;
+	}
+
+
+	if (isVisible) {
+		uint idxOffset = bitCount(voteVisible & gl_ThreadLtMaskNV);
+
+        // set output data
+        o_Patch[idxOffset].vertices = v;
+        o_Patch[idxOffset].key = key;
+
+       
+
+		//if(gl_LocalInvocationID.x == 1)
+		//	gl_TaskCountNV = 0;
+
+    } 
+
 }
 #endif
 
@@ -201,62 +220,34 @@ void main()
  */
 #ifdef MESH_SHADER
 #line 1
-
-layout(local_size_x = 1) in;
-layout(max_vertices = 32, max_primitives = 32) out;
+ //#undef COMPUTE_THREAD_COUNT
+ //#define COMPUTE_THREAD_COUNT 1
+layout(local_size_x = COMPUTE_THREAD_COUNT) in;
+layout(max_vertices = 3, max_primitives = 1) out;
 layout(triangles) out;
 
 
 taskNV in Patch {
     vec4 vertices[3];
     uint key;
-} i_Patch;
+} i_Patch[COMPUTE_THREAD_COUNT];
 
 layout(location = 0) out Interpolants{
     vec2 o_TexCoord;
-} OUT[];
+} OUT[COMPUTE_THREAD_COUNT];
 
 void main()
 {
-    //o_TexCoord = vec2(0);
-#if 0
-    vec3 v[3] = i_Patch.vertices;
-
-#if FLAG_DISPLACE
-    finalVertex.z+= dmap(finalVertex.xy);
-#endif
-
-    gl_PrimitiveCountNV = 1;
-
-    /*gl_PrimitiveIndicesNV[0] = 0;
-    gl_PrimitiveIndicesNV[1] = 1;
-    gl_PrimitiveIndicesNV[2] = 2;*/
-
-    int edgeCnt = 1;
-    float edgeLength = 1.0 / float(edgeCnt);
-    int vertexCnt = 3;
-    int i = 0;
-
-    // start a strip
-    for (int j = 0; j < vertexCnt; ++j) {
-        int ui = j >> 1;
-        int vi = (edgeCnt - 1) - (i - (j & 1));
-        vec2 tessCoord = vec2(ui, vi) * edgeLength;
-        vec3 finalVertex = berp(v, tessCoord);
-
-        OUT[0].o_TexCoord = tessCoord;
-        gl_MeshVerticesNV[j].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
-        for (int k = 0; k < 6; k++) {
-            gl_MeshVerticesNV[j].gl_ClipDistance[k] = 1.0;
-        }
-
-        gl_PrimitiveIndicesNV[j] = j;
-    }
-#else
 #line 242
 #define NUM_CLIPPING_PLANES 6
+	//int id = int(gl_LocalInvocationID.x);
+	int id = int(gl_WorkGroupID.x);
 
-    vec3 v[3] = vec3[3](i_Patch.vertices[0].xyz, i_Patch.vertices[1].xyz, i_Patch.vertices[2].xyz);
+    vec3 v[3] = vec3[3](
+		i_Patch[id].vertices[0].xyz,
+		i_Patch[id].vertices[1].xyz,
+		i_Patch[id].vertices[2].xyz
+		);
     //v = vec3[3](vec3(0), vec3(1,0,0), vec3(0,1,0));
 
     gl_PrimitiveCountNV = 1;
@@ -268,16 +259,20 @@ void main()
     for (int vert = 0; vert < 3; ++vert) {
         vec2 uv = vec2(vert & 1, vert >> 1 & 1);
         vec3 finalVertex = berp(v, uv);
-        //gl_MeshVerticesNV[vert].gl_Position = vec4(uv, 0.0, 1.0);
-        gl_MeshVerticesNV[vert].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
 
-        gl_PrimitiveIndicesNV[vert] = vert;
+		//int idx = 3 * id + vert;
+		int idx = vert;
+
+        //gl_MeshVerticesNV[vert].gl_Position = vec4(uv, 0.0, 1.0);
+        gl_MeshVerticesNV[idx].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
+
+        gl_PrimitiveIndicesNV[idx] = idx;
 
         for (int i = 0; i < NUM_CLIPPING_PLANES; i++) {
-            gl_MeshVerticesNV[vert].gl_ClipDistance[i] = 1.0;
+            gl_MeshVerticesNV[idx].gl_ClipDistance[i] = 1.0;
         }
 
-        OUT[vert].o_TexCoord = uv;
+        OUT[idx].o_TexCoord = uv;
     }
 
 
@@ -285,7 +280,6 @@ void main()
     /*gl_PrimitiveIndicesNV[0] = 0;
     gl_PrimitiveIndicesNV[1] = 1;
     gl_PrimitiveIndicesNV[2] = 2;*/
-#endif
 }
 #endif
 
