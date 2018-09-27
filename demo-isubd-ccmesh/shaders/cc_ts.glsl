@@ -83,6 +83,8 @@ void main()
 layout (vertices = 1) out;
 out Patch {
     vec4 vertices[4];
+    vec4 tangents[4];
+    vec4 bitangents[4];
     flat uint key;
 } o_Patch[];
 
@@ -171,7 +173,7 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec4 v[4], vp[4]; subd(key, v_in, v, vp);
+    vec4 v[4], vp[4], vt[4], vb[4]; subd(key, v_in, v, vp, vt, vb);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -203,6 +205,8 @@ void main()
 
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
+        o_Patch[gl_InvocationID].tangents = vt;
+        o_Patch[gl_InvocationID].bitangents = vb;
         o_Patch[gl_InvocationID].key = key;
     } else /* is not visible ? */ {
         // cull the geometry
@@ -227,10 +231,15 @@ void main()
 layout (quads, ccw, equal_spacing) in;
 in Patch {
     vec4 vertices[4];
+    vec4 tangents[4];
+    vec4 bitangents[4];
     flat uint key;
 } i_Patch[];
 
-layout(location = 0) out vec2 o_TexCoord;
+out FragData {
+    vec4 tgU;
+    vec4 bgV;
+} o_FragData;
 
 vec4 berp(in vec4 v_in[4], vec2 u)
 {
@@ -239,10 +248,14 @@ vec4 berp(in vec4 v_in[4], vec2 u)
 
 void main()
 {
+    vec2 uv = gl_TessCoord.xy;
     vec4 v[4] = i_Patch[0].vertices;
-    vec4 finalVertex = berp(v, gl_TessCoord.xy);
+    vec4 finalVertex = berp(v, uv);
 
-    o_TexCoord = gl_TessCoord.xy;
+    o_FragData.tgU.xyz = berp(i_Patch[0].tangents, uv).xyz;
+    o_FragData.bgV.xyz = berp(i_Patch[0].bitangents, uv).xyz;
+    o_FragData.tgU.w = gl_TessCoord.x;
+    o_FragData.bgV.w = gl_TessCoord.y;
     gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
@@ -254,7 +267,11 @@ void main()
  * This fragment shader is responsible for shading the final geometry.
  */
 #ifdef FRAGMENT_SHADER
-layout(location = 0) in vec2 i_TexCoord;
+in FragData {
+    vec4 tgU;
+    vec4 bgV;
+} i_FragData;
+
 layout(location = 0) out vec4 o_FragColor;
 
 // barycentric interpolation
@@ -265,6 +282,7 @@ vec3 berp(in vec3 v_in[4], in vec2 u)
 
 void main()
 {
+#if 0
     vec3 c[4] = vec3[4](vec3(0.0,0.25,0.25),
                         vec3(0.86,0.00,0.00),
                         vec3(1.0,0.50,0.00),
@@ -272,6 +290,13 @@ void main()
     vec3 color = berp(c, i_TexCoord);
 
     o_FragColor = vec4(color, 1);
+#endif
+    vec3 tg = i_FragData.tgU.xyz;
+    vec3 bg = i_FragData.bgV.xyz;
+    vec3 n = normalize(cross(tg, bg));
+
+    vec2 uv = vec2(i_FragData.tgU.w, i_FragData.bgV.w);
+    o_FragColor = vec4(clamp(n.zzz, 0.0, 1.0), 1);
 }
 
 #endif
