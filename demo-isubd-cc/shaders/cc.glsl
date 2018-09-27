@@ -37,25 +37,6 @@ uniform sampler2D u_DmapSampler;
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
 
-float distanceToLod(float z, float lodFactor)
-{
-    return -log2(clamp(z * lodFactor, 0.0f, 1.0f));
-}
-
-float computeLod(vec3 c)
-{
-    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
-    float z = length(cxf);
-
-    return distanceToLod(z, u_LodFactor);
-}
-
-float computeLod(in vec4 v[4])
-{
-    vec3 c = (v[0].xyz + v[1].xyz + v[2].xyz + v[3].xyz) / 4.0;
-    return computeLod(c);
-}
-
 // -----------------------------------------------------------------------------
 /**
  * Vertex Shader
@@ -78,8 +59,28 @@ void main()
 layout (vertices = 1) out;
 out Patch {
     vec4 vertices[4];
-    flat uint key;
+    vec4 tangents[4];
+    vec4 bitangents[4];
 } o_Patch[];
+
+float distanceToLod(float z, float lodFactor)
+{
+    return -log2(clamp(z * lodFactor, 0.0f, 1.0f));
+}
+
+float computeLod(vec3 c)
+{
+    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
+    float z = length(cxf);
+
+    return distanceToLod(z, u_LodFactor);
+}
+
+float computeLod(in vec4 v[4])
+{
+    vec3 c = (v[0].xyz + v[1].xyz + v[2].xyz + v[3].xyz) / 4.0;
+    return computeLod(c);
+}
 
 void writeKey(uint primID, uint key)
 {
@@ -140,7 +141,7 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec4 v[4], vp[4]; subd(key, v_in, v, vp);
+    vec4 v[4], vp[4], vt[4], vb[4]; subd(key, v_in, v, vp, vt, vb);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -172,7 +173,8 @@ void main()
 
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
-        o_Patch[gl_InvocationID].key = key;
+        o_Patch[gl_InvocationID].tangents = vt;
+        o_Patch[gl_InvocationID].bitangents = vb;
     } else /* is not visible ? */ {
         // cull the geometry
         gl_TessLevelInner[0] =
@@ -196,10 +198,14 @@ void main()
 layout (quads, ccw, equal_spacing) in;
 in Patch {
     vec4 vertices[4];
-    flat uint key;
+    vec4 tangents[4];
+    vec4 bitangents[4];
 } i_Patch[];
 
-layout(location = 0) out vec2 o_TexCoord;
+out FragData {
+    vec4 tgU;
+    vec4 bgV;
+} o_FragData;
 
 vec4 berp(in vec4 v_in[4], vec2 u)
 {
@@ -215,7 +221,10 @@ void main()
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
-    o_TexCoord = finalVertex.xy;
+    o_FragData.tgU.xyz = berp(i_Patch[0].tangents, gl_TessCoord.xy).xyz;
+    o_FragData.bgV.xyz = berp(i_Patch[0].bitangents, gl_TessCoord.xy).xyz;
+    o_FragData.tgU.w = gl_TessCoord.x;
+    o_FragData.bgV.w = gl_TessCoord.y;
     gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
@@ -227,12 +236,21 @@ void main()
  * This fragment shader is responsible for shading the final geometry.
  */
 #ifdef FRAGMENT_SHADER
-layout(location = 0) in vec2 i_TexCoord;
+in FragData {
+    vec4 tgU;
+    vec4 bgV;
+} i_FragData;
+
 layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-    o_FragColor = vec4(0, 0, 0, 1);
+    vec3 tg = i_FragData.tgU.xyz;
+    vec3 bg = i_FragData.bgV.xyz;
+    vec3 n = normalize(cross(tg, bg));
+
+    vec2 uv = vec2(i_FragData.tgU.w, i_FragData.bgV.w);
+    o_FragColor = vec4(abs(normalize(n)), 1);
 }
 
 #endif
