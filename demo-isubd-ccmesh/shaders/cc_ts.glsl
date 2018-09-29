@@ -296,7 +296,7 @@ void main()
     vec3 n = normalize(cross(tg, bg));
 
     vec2 uv = vec2(i_FragData.tgU.w, i_FragData.bgV.w);
-    o_FragColor = vec4(clamp(n.zzz, 0.0, 1.0), 1);
+    o_FragColor = vec4(clamp(abs(normalize(n)), 0.0, 1.0), 1);
 }
 
 #endif
