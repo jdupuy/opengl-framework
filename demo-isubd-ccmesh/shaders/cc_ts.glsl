@@ -179,11 +179,11 @@ void main()
 #endif
     updateSubdBuffer(primID, key, targetLod, parentLod);
 
-#if 0//FLAG_CULL
+#if FLAG_CULL
     // Cull invisible nodes
     mat4 mvp = u_Transform.modelViewProjection;
-    vec3 bmin = min(min(ccp.v[0], v[1]), v[2]).xyz;
-    vec3 bmax = max(max(v[0], v[1]), v[2]).xyz;
+    vec3 bmin = min(min(ccp.v[0], ccp.v[1]), min(ccp.v[2], ccp.v[3])).xyz;
+    vec3 bmax = max(max(ccp.v[0], ccp.v[1]), max(ccp.v[2], ccp.v[3])).xyz;
 
     if (/* is visible ? */frustumCullingTest(mvp, bmin, bmax)) {
 #else
