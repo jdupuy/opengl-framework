@@ -67,12 +67,19 @@ mat4 keyToXform(in uint key, out mat4 xfp)
 
 // subdivision routine (vertex position only) with parents
 void
-subd(in uint key, in vec4 v_in[4], out vec4 v_out[4], out vec4 v_out_p[4])
-{
+subd(
+    in uint key,
+    in vec4 v_in[4],
+    out vec4 v_out[4],
+    out vec4 v_out_p[4],
+    out float u[2]
+) {
     mat4 xfp; mat4 xf = keyToXform(key, xfp);
+    vec4 u_in = vec4(-1, 0, 1, 2);
     vec4 x_in = vec4(v_in[0].x, v_in[1].x, v_in[2].x, v_in[3].x);
     vec4 y_in = vec4(v_in[0].y, v_in[1].y, v_in[2].y, v_in[3].y);
     vec4 z_in = vec4(v_in[0].z, v_in[1].z, v_in[2].z, v_in[3].z);
+    vec4 u_out = xf * u_in;
     vec4 x_out = xf * x_in;
     vec4 y_out = xf * y_in;
     vec4 z_out = xf * z_in;
@@ -89,4 +96,7 @@ subd(in uint key, in vec4 v_in[4], out vec4 v_out[4], out vec4 v_out_p[4])
     v_out_p[1] = vec4(x_out_p[1], y_out_p[1], z_out_p[1], 1);
     v_out_p[2] = vec4(x_out_p[2], y_out_p[2], z_out_p[2], 1);
     v_out_p[3] = vec4(x_out_p[3], y_out_p[3], z_out_p[3], 1);
+
+    u[0] = u_out[1];
+    u[1] = u_out[2];
 }

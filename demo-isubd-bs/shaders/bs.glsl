@@ -64,7 +64,7 @@ void main()
 layout (vertices = 1) out;
 out Patch {
     vec4 vertices[4];
-    flat uint key;
+    float u[2];
 } o_Patch[];
 
 void writeKey(uint primID, uint key)
@@ -103,7 +103,7 @@ void main()
     // get threadID (each key is associated to a thread)
     int threadID = gl_PrimitiveID;
 
-    // get coarse triangle associated to the key
+    // get coarse line associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
     vec4 v_in[4] = vec4[4](
         u_VertexBuffer[0],
@@ -114,7 +114,7 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec4 v[4], vp[4]; subd(key, v_in, v, vp);
+    vec4 v[4], vp[4]; float u[2]; subd(key, v_in, v, vp, u);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -137,7 +137,7 @@ void main()
 
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
-        o_Patch[gl_InvocationID].key = key;
+        o_Patch[gl_InvocationID].u = u;
     }
 }
 #endif
@@ -153,17 +153,18 @@ void main()
 layout (isolines, equal_spacing) in;
 in Patch {
     vec4 vertices[4];
-    flat uint key;
+    float u[2];
 } i_Patch[];
 
-layout(location = 0) out vec2 o_TexCoord;
+layout(location = 0) out float o_TexCoord;
 
 void main()
 {
+    float u[2] = i_Patch[0].u;
     vec4 v[4] = i_Patch[0].vertices;
     vec4 finalVertex = mix(v[1], v[2], gl_TessCoord.x);
 
-    o_TexCoord = gl_TessCoord.xy;
+    o_TexCoord = mix(u[0], u[1], gl_TessCoord.x);;
     gl_Position = finalVertex;
 }
 #endif
@@ -175,13 +176,14 @@ void main()
  * This fragment shader is responsible for shading the final geometry.
  */
 #ifdef FRAGMENT_SHADER
-layout(location = 0) in vec2 i_TexCoord;
+layout(location = 0) in float i_TexCoord;
 layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
     vec3 myColor = vec3(0.10,0.50,0.10);
     o_FragColor = vec4(myColor, 1);
+    o_FragColor = vec4(i_TexCoord, 0, 0, 1);
 }
 
 #endif

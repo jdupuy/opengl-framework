@@ -128,6 +128,7 @@ subd(
             - vec4(x_out[0][2], y_out[0][2], z_out[0][2], 1)) / 2.0;
 
     // bitangents
+    float s2 = sign(determinant(xfv));
     v_bg[0] =(vec4(x_out[1][2], y_out[1][2], z_out[1][2], 1)
             - vec4(x_out[1][0], y_out[1][0], z_out[1][0], 1)) / 2.0;
     v_bg[1] =(vec4(x_out[2][2], y_out[2][2], z_out[2][2], 1)
