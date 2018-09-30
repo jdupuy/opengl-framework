@@ -57,11 +57,7 @@ void main()
  */
 #ifdef TESS_CONTROL_SHADER
 layout (vertices = 1) out;
-out Patch {
-    vec4 vertices[4];
-    vec4 tangents[4];
-    vec4 bitangents[4];
-} o_Patch[];
+layout (location = 0) out ccpatch o_Patch[];
 
 float distanceToLod(float z, float lodFactor)
 {
@@ -141,9 +137,9 @@ void main()
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec4 v[4], vp[4], vt[4], vb[4]; subd(key, v_in, v, vp, vt, vb);
-    int targetLod = int(computeLod(v));
-    int parentLod = int(computeLod(vp));
+    ccpatch ccp; subd(key, v_in, ccp);
+    int targetLod = int(computeLod(ccp.v));
+    int parentLod = targetLod;
 #if FLAG_FREEZE
     parentLod = targetLod = findMSB(key) / 2;
 #endif
@@ -172,9 +168,7 @@ void main()
         gl_TessLevelOuter[3] = tessLevel;
 
         // set output data
-        o_Patch[gl_InvocationID].vertices = v;
-        o_Patch[gl_InvocationID].tangents = vt;
-        o_Patch[gl_InvocationID].bitangents = vb;
+        o_Patch[gl_InvocationID] = ccp;
     } else /* is not visible ? */ {
         // cull the geometry
         gl_TessLevelInner[0] =
@@ -196,16 +190,17 @@ void main()
  */
 #ifdef TESS_EVALUATION_SHADER
 layout (quads, ccw, equal_spacing) in;
-in Patch {
-    vec4 vertices[4];
-    vec4 tangents[4];
-    vec4 bitangents[4];
-} i_Patch[];
+layout (location = 0) in ccpatch i_Patch[];
 
 out FragData {
     vec4 tgU;
     vec4 bgV;
 } o_FragData;
+
+vec2 berp(in vec2 v_in[4], vec2 u)
+{
+    return mix(mix(v_in[0], v_in[1], u.x), mix(v_in[3], v_in[2], u.x), u.y);
+}
 
 vec4 berp(in vec4 v_in[4], vec2 u)
 {
@@ -214,17 +209,18 @@ vec4 berp(in vec4 v_in[4], vec2 u)
 
 void main()
 {
-    vec4 v[4] = i_Patch[0].vertices;
+    vec4 v[4] = i_Patch[0].v;
     vec4 finalVertex = berp(v, gl_TessCoord.xy);
+    vec2 uv = berp(i_Patch[0].uv, gl_TessCoord.xy);
 
 #if FLAG_DISPLACE
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
-    o_FragData.tgU.xyz = berp(i_Patch[0].tangents, gl_TessCoord.xy).xyz;
-    o_FragData.bgV.xyz = berp(i_Patch[0].bitangents, gl_TessCoord.xy).xyz;
-    o_FragData.tgU.w = gl_TessCoord.x;
-    o_FragData.bgV.w = gl_TessCoord.y;
+    o_FragData.tgU.xyz = berp(i_Patch[0].tg, gl_TessCoord.xy).xyz;
+    o_FragData.bgV.xyz = berp(i_Patch[0].bg, gl_TessCoord.xy).xyz;
+    o_FragData.tgU.w = uv.x;
+    o_FragData.bgV.w = uv.y;
     gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
@@ -250,7 +246,8 @@ void main()
     vec3 n = normalize(cross(tg, bg));
 
     vec2 uv = vec2(i_FragData.tgU.w, i_FragData.bgV.w);
-    o_FragColor = vec4(clamp((normalize(bg)), 0.0, 1.0), 1);
+    o_FragColor = vec4(clamp((normalize(n)), 0.0, 1.0), 1);
+    o_FragColor = vec4(clamp(n.zzz, 0.0, 1.0), 1);
     //o_FragColor = vec4(uv, 0.0, 1.0);
 }
 
