@@ -57,7 +57,7 @@ struct FramebufferManager {
     struct {int fixed;} msaa;
     struct {float r, g, b;} clearColor;
 } g_framebuffer = {
-    VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT, AA_MSAA2,
+    VIEWER_DEFAULT_WIDTH, VIEWER_DEFAULT_HEIGHT, AA_NONE,
     {false},
     {61.0f/255.0f, 119.0f/255.0f, 192.0f/255.0f}
 };
@@ -420,6 +420,10 @@ void setupSubdKernel(djg_program *djp)
                      BUFFER_GEOMETRY_VERTICES);
     djgp_push_string(djp, "#define BUFFER_BINDING_GEOMETRY_INDEXES %i\n",
                      BUFFER_GEOMETRY_INDEXES);
+    djgp_push_string(djp, "#define BUFFER_BINDING_INSTANCED_GEOMETRY_VERTICES %i\n",
+                     BUFFER_INSTANCED_GEOMETRY_VERTICES);
+    djgp_push_string(djp, "#define BUFFER_BINDING_INSTANCED_GEOMETRY_INDEXES %i\n",
+                     BUFFER_INSTANCED_GEOMETRY_INDEXES);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
@@ -1456,6 +1460,15 @@ void renderSceneMs() {
     int nextOffset = 0;
 
     glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+   
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                     BUFFER_INSTANCED_GEOMETRY_VERTICES,
+                     g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+                     BUFFER_INSTANCED_GEOMETRY_INDEXES,
+                     g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+
 
     // render terrain
     if (g_terrain.flags.reset) {
@@ -1742,6 +1755,7 @@ void renderGui(double cpuDt, double gpuDt)
     // draw HUD
     if (g_app.viewer.hud) {
         // ImGui
+        glUseProgram(0);
         ImGui_ImplGlfwGL3_NewFrame();
         // Viewer Widgets
         ImGui::SetNextWindowPos(ImVec2(270, 10)/*, ImGuiSetCond_FirstUseEver*/);
