@@ -1936,16 +1936,6 @@ keyboardCallback(
                 loadPrograms();
                 g_framebuffer.flags.reset = true;
             break;
-            case GLFW_KEY_T:
-                static int id = 0;
-                char name[64], path[1024];
-
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, g_gl.framebuffers[FRAMEBUFFER_BACK]);
-                sprintf(name, "screenshot_%09i", id);
-                strcat2(path, g_app.dir.output, name);
-                djgt_save_glcolorbuffer_png(GL_COLOR_ATTACHMENT0, GL_RGBA, path);
-                ++id;
-            break;
             default: break;
         }
     }
