@@ -1320,7 +1320,7 @@ void renderViewer(double cpuDt, double gpuDt)
 
                 snprintf(buf, 1024, "screenshot%03i", cnt);
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                djgt_save_glcolorbuffer_bmp(GL_FRONT, GL_RGBA, buf);
+                djgt_save_glcolorbuffer_png(GL_FRONT, GL_RGBA, buf);
                 ++cnt;
             }
             if (ImGui::Button("Record"))
