@@ -2,8 +2,7 @@
 
 This demo provides additional implementations for the article 
 "Adaptive GPU Tessellation with Compute Shaders" by Jad Khoury, Jonathan Dupuy (myself) and 
-Christophe Riccio.
-The paper is available on my website: http://onrendering.com
+Christophe Riccio; the paper is available on my website: <http://onrendering.com>.
 
 Specifically, the demo provides up to 4 rendering techniques:
 
