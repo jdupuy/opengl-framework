@@ -1373,14 +1373,14 @@ void renderViewer(double cpuDt, double gpuDt)
                 loadSphereProgram();
                 g_framebuffer.flags.reset = true;
             }
-            if (!g_sphere.shading.merl.files.empty() > 0) {
+            if (!g_sphere.shading.merl.files.empty()) {
                 if (ImGui::Combo("Merl", &g_sphere.shading.merl.id, &g_sphere.shading.merl.files[0], g_sphere.shading.merl.files.size())) {
                     loadMerlTexture();
                     loadSphereProgram();
                     g_framebuffer.flags.reset = true;
                 }
             }
-            if (!g_sphere.shading.envmap.files.empty() > 0) {
+            if (!g_sphere.shading.envmap.files.empty()) {
                 if (ImGui::Combo("Envmap", &g_sphere.shading.envmap.id, &g_sphere.shading.envmap.files[0], g_sphere.shading.envmap.files.size())) {
                     loadEnvmapTexture();
                     loadSphereProgram();
