@@ -56,20 +56,13 @@ target_compile_definitions(merl PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_D
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
-#set(SRC_DIR plot-brdf)
-#include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
-#aux_source_directory(${SRC_DIR} SRC_FILES)
-#add_executable(plot-brdf ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
-#target_link_libraries(plot-brdf glfw imgui)
-#unset(SRC_FILES)
-
-# ------------------------------------------------------------------------------
-#set(SRC_DIR demo-bspline)
-#include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
-#aux_source_directory(${SRC_DIR} SRC_FILES)
-#add_executable(demo-bspline ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
-#target_link_libraries(demo-bspline glfw imgui)
-#unset(SRC_FILES)
+set(SRC_DIR plot-brdf)
+include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
+aux_source_directory(${SRC_DIR} SRC_FILES)
+add_executable(plot-brdf ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
+target_link_libraries(plot-brdf glfw imgui)
+target_compile_definitions(plot-brdf PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
+unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
 set(SRC_DIR demo-isubd-terrain)
