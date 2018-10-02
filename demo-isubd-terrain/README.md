@@ -15,7 +15,7 @@ tessellation factors
 tessellation factors
 
 * *Mesh Shader* -- Single-pass rendering with a task and mesh shader (Turing GPUs only); the mesh shader produces a grid 
-with *fixed* tessellation factors.
+with *fixed* tessellation factors
 
 The demo loads a 16-bit displacement map and allows the user to play with the subdivision parameters.
 This source code is released in order to facilitate adoption by developpers.
