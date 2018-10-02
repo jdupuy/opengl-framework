@@ -39,6 +39,9 @@
 #ifndef PATH_TO_SRC_DIRECTORY
 #   define PATH_TO_SRC_DIRECTORY "./"
 #endif
+#ifndef PATH_TO_ASSET_DIRECTORY
+#   define PATH_TO_ASSSET_DIRECTORY "../assets/"
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
@@ -79,6 +82,7 @@ struct CameraManager {
 // -----------------------------------------------------------------------------
 // Quadtree Manager
 enum {METHOD_TS, METHOD_GS, METHOD_CS, METHOD_MS};
+enum {SHADING_DIFFUSE, SHADING_NORMALS, SHADING_LOD};
 struct TerrainManager {
     struct {bool displace, cull, freeze, wire, reset;} flags;
     struct {
@@ -86,13 +90,15 @@ struct TerrainManager {
         float scale;
     } dmap;
     int method, computeThreadCount;
+    int shading;
     int gpuSubd;
     int pingPong;
     float primitivePixelLengthTarget;
 } g_terrain = {
-    {false, true, false, false, true},
-    {std::string(), 0.3f},
-    METHOD_CS, 5,
+    {true, true, false, false, true},
+    {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.3f},
+    METHOD_TS, 5,
+    SHADING_DIFFUSE,
     3,
     0,
     5.f
@@ -149,6 +155,7 @@ enum {
     TEXTURE_SCENE,
     TEXTURE_Z,
     TEXTURE_DMAP,
+    TEXTURE_SMAP,
     TEXTURE_COUNT
 };
 enum {
@@ -179,6 +186,7 @@ enum {
     UNIFORM_SUBD_CS_LOD_LOD_FACTOR,     // compute-based pipeline only
 
     UNIFORM_TERRAIN_DMAP_SAMPLER,
+    UNIFORM_TERRAIN_SMAP_SAMPLER,
     UNIFORM_TERRAIN_DMAP_FACTOR,
     UNIFORM_TERRAIN_LOD_FACTOR,
 
@@ -302,6 +310,9 @@ void configureTerrainProgram()
     glProgramUniform1i(g_gl.programs[PROGRAM_TERRAIN],
                        g_gl.uniforms[UNIFORM_TERRAIN_DMAP_SAMPLER],
                        TEXTURE_DMAP);
+    glProgramUniform1i(g_gl.programs[PROGRAM_TERRAIN],
+                       g_gl.uniforms[UNIFORM_TERRAIN_SMAP_SAMPLER],
+                       TEXTURE_SMAP);
     glProgramUniform1f(g_gl.programs[PROGRAM_TERRAIN],
                        g_gl.uniforms[UNIFORM_TERRAIN_DMAP_FACTOR],
                        g_terrain.dmap.scale);
@@ -389,6 +400,18 @@ void setupSubdKernel(djg_program *djp)
     if (g_terrain.flags.freeze)
         djgp_push_string(djp, "#define FLAG_FREEZE 1\n");
 
+    switch (g_terrain.shading) {
+        case SHADING_DIFFUSE:
+           djgp_push_string(djp, "#define SHADING_DIFFUSE 1\n");
+        break;
+        case SHADING_NORMALS:
+           djgp_push_string(djp, "#define SHADING_NORMALS 1\n");
+        break;
+        case SHADING_LOD:
+           djgp_push_string(djp, "#define SHADING_LOD 1\n");
+        break;
+    }
+
     djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_terrain.gpuSubd);
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", STREAM_SUBD_COUNTER);
@@ -454,6 +477,8 @@ bool loadTerrainProgram()
         glGetUniformLocation(g_gl.programs[PROGRAM_TERRAIN], "u_DmapFactor");
     g_gl.uniforms[UNIFORM_TERRAIN_DMAP_SAMPLER] =
         glGetUniformLocation(g_gl.programs[PROGRAM_TERRAIN], "u_DmapSampler");
+    g_gl.uniforms[UNIFORM_TERRAIN_SMAP_SAMPLER] =
+        glGetUniformLocation(g_gl.programs[PROGRAM_TERRAIN], "u_SmapSampler");
     g_gl.uniforms[UNIFORM_TERRAIN_LOD_FACTOR] =
         glGetUniformLocation(g_gl.programs[PROGRAM_TERRAIN], "u_LodFactor");
 
@@ -464,82 +489,86 @@ bool loadTerrainProgram()
 
 bool loadSubdCsLodProgram()
 {
-    djg_program *djp = djgp_create();
-    GLuint *program = &g_gl.programs[PROGRAM_SUBD_CS_LOD];
-    char buf[1024];
+    if (g_terrain.method == METHOD_CS) {
+        djg_program *djp = djgp_create();
+        GLuint *program = &g_gl.programs[PROGRAM_SUBD_CS_LOD];
+        char buf[1024];
 
-    LOG("Loading {Compute-LoD-Program}\n");
-    setupSubdKernel(djp);
+        LOG("Loading {Compute-LoD-Program}\n");
+        setupSubdKernel(djp);
 
-    djgp_push_string(djp,
-                     "#define COMPUTE_THREAD_COUNT %i\n",
-                     1u << g_terrain.computeThreadCount);
-    djgp_push_string(djp,
-                     "#define BUFFER_BINDING_CULLED_SUBD %i\n",
-                     BUFFER_CULLED_SUBD2);
-    djgp_push_string(djp,
-                     "#define BUFFER_BINDING_SUBD_COUNTER_PREVIOUS %i\n",
-                     STREAM_SUBD_COUNTER_PREVIOUS);
-    djgp_push_string(djp,
-                     "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n",
-                     STREAM_CULLED_SUBD_COUNTER);
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
+        djgp_push_string(djp,
+                         "#define COMPUTE_THREAD_COUNT %i\n",
+                         1u << g_terrain.computeThreadCount);
+        djgp_push_string(djp,
+                         "#define BUFFER_BINDING_CULLED_SUBD %i\n",
+                         BUFFER_CULLED_SUBD2);
+        djgp_push_string(djp,
+                         "#define BUFFER_BINDING_SUBD_COUNTER_PREVIOUS %i\n",
+                         STREAM_SUBD_COUNTER_PREVIOUS);
+        djgp_push_string(djp,
+                         "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n",
+                         STREAM_CULLED_SUBD_COUNTER);
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
 
-    if (!djgp_to_gl(djp, 450, false, true, program)) {
-        LOG("=> Failure <=\n");
+        if (!djgp_to_gl(djp, 450, false, true, program)) {
+            LOG("=> Failure <=\n");
+            djgp_release(djp);
+
+            return false;
+        }
         djgp_release(djp);
 
-        return false;
+        g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_FACTOR] =
+            glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_DmapFactor");
+        g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_SAMPLER] =
+            glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_DmapSampler");
+        g_gl.uniforms[UNIFORM_SUBD_CS_LOD_LOD_FACTOR] =
+            glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_LodFactor");
+
+        configureSubdCsLodProgram();
     }
-    djgp_release(djp);
-
-    g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_FACTOR] =
-        glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_DmapFactor");
-    g_gl.uniforms[UNIFORM_SUBD_CS_LOD_DMAP_SAMPLER] =
-        glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_DmapSampler");
-    g_gl.uniforms[UNIFORM_SUBD_CS_LOD_LOD_FACTOR] =
-        glGetUniformLocation(g_gl.programs[PROGRAM_SUBD_CS_LOD], "u_LodFactor");
-
-    configureSubdCsLodProgram();
 
     return (glGetError() == GL_NO_ERROR);
 }
 
 bool loadSubdBatchProgram()
 {
-    djg_program *djp = djgp_create();
-    GLuint *program = &g_gl.programs[PROGRAM_SUBD_BATCH];
-    char buf[1024];
+    if (g_terrain.method == METHOD_MS || g_terrain.method == METHOD_CS) {
+        djg_program *djp = djgp_create();
+        GLuint *program = &g_gl.programs[PROGRAM_SUBD_BATCH];
+        char buf[1024];
 
-    LOG("Loading {Compute-Batch-Program}\n");
+        LOG("Loading {Compute-Batch-Program}\n");
 
-    if (g_terrain.method == METHOD_CS) {
-        djgp_push_string(djp, "#define FLAG_COMPUTE_PATH 1\n");
+        if (g_terrain.method == METHOD_CS) {
+            djgp_push_string(djp, "#define FLAG_COMPUTE_PATH 1\n");
+            djgp_push_string(djp,
+                             "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
+                             BUFFER_DISPATCH_INDIRECT);
+        } else if (g_terrain.method == METHOD_MS) {
+            djgp_push_string(djp, "#define FLAG_MESH_PATH 1\n");
+            djgp_push_string(djp,
+                             "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
+                              BUFFER_DISPATCH_INDIRECT);
+        }
+
         djgp_push_string(djp,
-                         "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
-                         BUFFER_DISPATCH_INDIRECT);
-    } else if (g_terrain.method == METHOD_MS) {
-        djgp_push_string(djp, "#define FLAG_MESH_PATH 1\n");
+                         "#define BUFFER_BINDING_SUBD_COUNTER %i\n",
+                         STREAM_SUBD_COUNTER);
         djgp_push_string(djp,
-                         "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n",
-                          BUFFER_DISPATCH_INDIRECT);
-    }
+                         "#define COMPUTE_THREAD_COUNT %i\n",
+                         1 << g_terrain.computeThreadCount);
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_batch.glsl"));
 
-    djgp_push_string(djp,
-                     "#define BUFFER_BINDING_SUBD_COUNTER %i\n",
-                     STREAM_SUBD_COUNTER);
-    djgp_push_string(djp,
-                     "#define COMPUTE_THREAD_COUNT %i\n",
-                     1 << g_terrain.computeThreadCount);
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_batch.glsl"));
+        if (!djgp_to_gl(djp, 450, false, true, program)) {
+            LOG("=> Failure <=\n");
+            djgp_release(djp);
 
-    if (!djgp_to_gl(djp, 450, false, true, program)) {
-        LOG("=> Failure <=\n");
+            return false;
+        }
         djgp_release(djp);
-
-        return false;
     }
-    djgp_release(djp);
 
     return (glGetError() == GL_NO_ERROR);
 }
@@ -678,6 +707,61 @@ bool loadBackFramebufferTexture()
 
 // -----------------------------------------------------------------------------
 /**
+ * Load the Slope Texture Map
+ *
+ * This loads an RG32F texture used as a slope map
+ */
+void loadSmapTexture(const djg_texture *dmap)
+{
+    int w = dmap->next->x;
+    int h = dmap->next->y;
+    const uint16_t *texels = (const uint16_t *)dmap->next->texels;
+    int mipcnt = djgt__mipcnt(w, h, 1);
+    std::vector<float> smap(w * h * 2);
+
+    for (int j = 0; j < h; ++j)
+    for (int i = 0; i < w; ++i) {
+        int i1 = std::max(0, i - 1);
+        int i2 = std::min(w - 1, i + 1);
+        int j1 = std::max(0, j - 1);
+        int j2 = std::min(h - 1, j + 1);
+        uint16_t px_l = texels[i1 + w * j ]; // in [0,2^16-1]
+        uint16_t px_r = texels[i2 + w * j ]; // in [0,2^16-1]
+        uint16_t px_b = texels[i  + w * j1]; // in [0,2^16-1]
+        uint16_t px_t = texels[i  + w * j2]; // in [0,2^16-1]
+        float z_l = (float)px_l / 65535.0f; // in [0, 1]
+        float z_r = (float)px_r / 65535.0f; // in [0, 1]
+        float z_b = (float)px_b / 65535.0f; // in [0, 1]
+        float z_t = (float)px_t / 65535.0f; // in [0, 1]
+        float slope_x = (float)w * 0.5f * (z_r - z_l);
+        float slope_y = (float)h * 0.5f * (z_t - z_b);
+
+        smap[    2 * (i + w * j)] = slope_x;
+        smap[1 + 2 * (i + w * j)] = slope_y;
+    }
+
+    if (glIsTexture(g_gl.textures[TEXTURE_SMAP]))
+        glDeleteTextures(1, &g_gl.textures[TEXTURE_SMAP]);
+
+    glGenTextures(1, &g_gl.textures[TEXTURE_SMAP]);
+    glActiveTexture(GL_TEXTURE0 + TEXTURE_SMAP);
+    glBindTexture(GL_TEXTURE_2D, g_gl.textures[TEXTURE_SMAP]);
+    glTexStorage2D(GL_TEXTURE_2D, mipcnt, GL_RG32F, w, h);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RG, GL_FLOAT, &smap[0]);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_MIN_FILTER,
+                    GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_S,
+                    GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_T,
+                    GL_CLAMP_TO_EDGE);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+/**
  * Load the Displacement Texture
  *
  * This loads an R16 texture used as a displacement map
@@ -689,9 +773,12 @@ bool loadDmapTexture()
         GLuint *glt = &g_gl.textures[TEXTURE_DMAP];
 
         LOG("Loading {Dmap-Texture}\n");
-        glActiveTexture(GL_TEXTURE0 + TEXTURE_DMAP);
-        djgt_push_image_u16(djgt, "demo_hf.png", 1);
+        djgt_push_image_u16(djgt, g_terrain.dmap.pathToFile.c_str(), 1);
 
+        // load smap from dmap
+        loadSmapTexture(djgt);
+
+        glActiveTexture(GL_TEXTURE0 + TEXTURE_DMAP);
         if (!djgt_to_gl(djgt, GL_TEXTURE_2D, GL_R16, 1, 1, glt)) {
             LOG("=> Failure <=\n");
             djgt_release(djgt);
@@ -1313,7 +1400,7 @@ void renderSceneTs() {
         g_terrain.flags.reset = false;
     } else {
         streamSubdCounterBuffer(&nextOffset);
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                          BUFFER_SUBD1,
                          g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
@@ -1348,7 +1435,7 @@ void renderSceneGs() {
         g_terrain.flags.reset = false;
     } else {
         streamSubdCounterBuffer(&nextOffset);
-        glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                          BUFFER_SUBD1,
                          g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
@@ -1722,9 +1809,14 @@ void renderGui(double cpuDt, double gpuDt)
         ImGui::End();
         // Terrain Widgets
         ImGui::SetNextWindowPos(ImVec2(10, 140)/*, ImGuiSetCond_FirstUseEver*/);
-        ImGui::SetNextWindowSize(ImVec2(510, 190)/*, ImGuiSetCond_FirstUseEver*/);
+        ImGui::SetNextWindowSize(ImVec2(510, 210)/*, ImGuiSetCond_FirstUseEver*/);
         ImGui::Begin("Terrain");
         {
+            const char* eShadings[] = {
+                "Diffuse",
+                "Normals",
+                "LoD"
+            };
             std::vector<const char *> eMethods = {
                 "Tessellation Shader",
                 "Geometry Shader",
@@ -1739,9 +1831,12 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::Text("GPU_dt: %.3f %s",
                         gpuDt < 1. ? gpuDt * 1e3 : gpuDt,
                         gpuDt < 1. ? "ms" : " s");
-            //if (ImGui::Button("Load Displacement Map"));
-            if (ImGui::Combo("Method", &g_terrain.method, &eMethods[0], eMethods.size())) {
+            if (ImGui::Combo("Shading", &g_terrain.shading, &eShadings[0], BUFFER_SIZE(eShadings))) {
                 loadTerrainProgram();
+                g_terrain.flags.reset = true;
+            }
+            if (ImGui::Combo("Method", &g_terrain.method, &eMethods[0], eMethods.size())) {
+                loadPrograms();
                 g_terrain.flags.reset = true;
             }
             ImGui::Text("flags: ");
@@ -1761,8 +1856,7 @@ void renderGui(double cpuDt, double gpuDt)
                     loadTerrainProgram();
             }
             if (ImGui::SliderInt("PatchSubdLevel", &g_terrain.gpuSubd, 0, 6)) {
-                loadTerrainProgram();
-                loadSubdCsLodProgram();
+                loadPrograms();
                 loadInstancedGeometryBuffers();
                 loadInstancedGeometryVertexArray();
                 g_terrain.flags.reset = true;

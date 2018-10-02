@@ -5,51 +5,48 @@
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
 readonly buffer SubdBufferIn {
-	uvec2 u_SubdBufferIn[];
+    uvec2 u_SubdBufferIn[];
 };
 
 layout (std430, binding = BUFFER_BINDING_SUBD2)
 buffer SubdBufferOut {
-	uvec2 u_SubdBufferOut[];
+    uvec2 u_SubdBufferOut[];
 };
 
 layout (std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
 readonly buffer VertexBuffer {
-	vec4 u_VertexBuffer[];
+    vec4 u_VertexBuffer[];
 };
 
 layout (std430, binding = BUFFER_BINDING_GEOMETRY_INDEXES)
 readonly buffer IndexBuffer {
-	uint u_IndexBuffer[];
+    uint u_IndexBuffer[];
 };
 
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
 struct Transform {
-	mat4 modelView;
-	mat4 projection;
-	mat4 modelViewProjection;
-	mat4 viewInv;
+    mat4 modelView;
+    mat4 projection;
+    mat4 modelViewProjection;
+    mat4 viewInv;
 };
 
 layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
 uniform Transforms {
-	Transform u_Transform;
+    Transform u_Transform;
 };
 
-uniform sampler2D u_DmapSampler;
+uniform sampler2D u_DmapSampler; // displacement map
+uniform sampler2D u_SmapSampler; // slope map
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
 
 // displacement map
 float dmap(vec2 pos)
 {
-#if 0
-    return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
-#else
     return (texture(u_DmapSampler, pos * 0.5 + 0.5).x) * u_DmapFactor;
-#endif
 }
 
 float distanceToLod(float z, float lodFactor)
@@ -217,7 +214,12 @@ void main()
     finalVertex.z+= dmap(finalVertex.xy);
 #endif
 
+#if SHADING_LOD
     o_TexCoord = gl_TessCoord.xy;
+#else
+    o_TexCoord = finalVertex.xy * 0.5 + 0.5;
+#endif
+
     gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
@@ -234,12 +236,29 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
+#if SHADING_LOD
     vec3 c[3] = vec3[3](vec3(0.0,0.25,0.25),
                         vec3(0.86,0.00,0.00),
                         vec3(1.0,0.50,0.00));
     vec3 color = berp(c, i_TexCoord);
-
     o_FragColor = vec4(color, 1);
+
+#elif SHADING_DIFFUSE
+    vec2 s = texture(u_SmapSampler, i_TexCoord).rg * u_DmapFactor;
+    vec3 n = normalize(vec3(-s, 1));
+    float d = clamp(n.z, 0.0, 1.0);
+
+    o_FragColor = vec4(vec3(d / 3.14159), 1);
+
+#elif SHADING_NORMALS
+    vec2 s = texture(u_SmapSampler, i_TexCoord).rg * u_DmapFactor;
+    vec3 n = normalize(vec3(-s, 1));
+
+    o_FragColor = vec4(abs(n), 1);
+
+#else
+    o_FragColor = vec4(1, 0, 0, 1);
+#endif
 }
 
 #endif

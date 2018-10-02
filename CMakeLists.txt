@@ -52,7 +52,7 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(merl ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(merl glfw imgui)
-target_compile_definitions(merl PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+target_compile_definitions(merl PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-terrain ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(isubd-terrain glfw imgui)
-target_compile_definitions(isubd-terrain PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+target_compile_definitions(isubd-terrain PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
@@ -86,7 +86,7 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-bs ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(isubd-bs glfw imgui)
-target_compile_definitions(isubd-bs PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+target_compile_definitions(isubd-bs PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
@@ -95,7 +95,7 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-cc ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(isubd-cc glfw imgui)
-target_compile_definitions(isubd-cc PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+target_compile_definitions(isubd-cc PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
@@ -104,7 +104,7 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-ccmesh ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(isubd-ccmesh glfw imgui)
-target_compile_definitions(isubd-ccmesh PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+target_compile_definitions(isubd-ccmesh PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
@@ -113,6 +113,6 @@ include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
 add_executable(isubd-loop ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
 target_link_libraries(isubd-loop glfw imgui)
-target_compile_definitions(isubd-loop PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/")
+target_compile_definitions(isubd-loop PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
