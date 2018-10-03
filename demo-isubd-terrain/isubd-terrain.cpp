@@ -414,6 +414,7 @@ void setupSubdKernel(djg_program *djp)
     }
 
     djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_terrain.gpuSubd);
+    djgp_push_string(djp, "#define PATCH_SUBD_LEVEL %i\n", g_terrain.gpuSubd);
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", STREAM_SUBD_COUNTER);
     djgp_push_string(djp, "#define BUFFER_BINDING_GEOMETRY_VERTICES %i\n",
@@ -447,12 +448,8 @@ bool loadTerrainProgram()
     if (g_terrain.method == METHOD_TS) {
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
     } else if (g_terrain.method == METHOD_GS) {
-        int edgeCnt = 1 << g_terrain.gpuSubd;
-        int vertexCnt = 0;
-
-        for (int i = 0; i < edgeCnt; ++i) {
-            vertexCnt+= 2 * i + 3;
-        }
+        int subdLevel = g_terrain.gpuSubd * 2;
+        int vertexCnt = (2 << subdLevel) + 1;
 
         djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));

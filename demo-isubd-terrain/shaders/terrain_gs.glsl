@@ -81,7 +81,7 @@ void main(void)
  */
 #ifdef GEOMETRY_SHADER
 layout(points) in;
-layout(triangle_strip, max_vertices = VERTICES_OUT) out;
+layout(triangle_strip, max_vertices = 256) out;
 layout(location = 0) out vec2 o_TexCoord;
 
 float computeLod(vec3 c)
@@ -131,6 +131,23 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
     }
 }
 
+void genVertex(in vec4 v[3], vec2 tessCoord)
+{
+    vec4 finalVertex = berp(v, tessCoord);
+
+#if FLAG_DISPLACE
+    finalVertex.z+= dmap(finalVertex.xy);
+#endif
+
+#if SHADING_LOD
+    o_TexCoord = tessCoord;
+#else
+    o_TexCoord = finalVertex.xy * 0.5 + 0.5;
+#endif
+    gl_Position = u_Transform.modelViewProjection * finalVertex;
+    EmitVertex();
+}
+
 void main()
 {
     // get threadID (each key is associated to a thread)
@@ -170,34 +187,53 @@ void main()
 #else
     if (true) {
 #endif // FLAG_CULL
-        // set tess levels
-        int edgeCnt = PATCH_TESS_LEVEL;
-        float edgeLength = 1.0 / float(edgeCnt);
+        /*
+            This routine generates a tessellated triangle with independent triangles
+        */
+#if 0
+        int subdLevel = PATCH_SUBD_LEVEL*2;
+        int primCnt   = 1 << subdLevel;
+        // other triangles
+        for (int i = 0; i < primCnt; ++i) {
+            uint key = i + primCnt;
+            mat3 xf = keyToXform(key);
+            vec2 u1 = (xf * vec3(0, 0, 1)).xy;
+            vec2 u2 = (xf * vec3(1, 0, 1)).xy;
+            vec2 u3 = (xf * vec3(0, 1, 1)).xy;
 
-        for (int i = 0; i < edgeCnt; ++i) {
-            int vertexCnt = 2 * i + 3;
-
-            // start a strip
-            for (int j = 0; j < vertexCnt; ++j) {
-                int ui = j >> 1;
-                int vi = (edgeCnt - 1) - (i - (j & 1));
-                vec2 tessCoord = vec2(ui, vi) * edgeLength;
-                vec4 finalVertex = berp(v, tessCoord);
-
-#if FLAG_DISPLACE
-                finalVertex.z+= dmap(finalVertex.xy);
-#endif
-
-#if SHADING_LOD
-                o_TexCoord = tessCoord;
-#else
-                o_TexCoord = finalVertex.xy * 0.5 + 0.5;
-#endif
-                gl_Position = u_Transform.modelViewProjection * finalVertex;
-                EmitVertex();
-            }
+            genVertex(v, u1);
+            genVertex(v, u2);
+            genVertex(v, u3);
             EndPrimitive();
         }
+#else
+        /*
+            This routine generates a tessellated triangle with a single triangle strip
+        */
+        int subdLevel = max(0, PATCH_SUBD_LEVEL - 1) * 2;
+        int stripCnt = 1 << subdLevel;
+        for (int i = 0; i < stripCnt; ++i) {
+            uint key = i + stripCnt;
+            mat3 xf = keyToXform(key);
+            vec2 u1 = (xf * vec3(0.0, 1.0, 1)).xy;
+            vec2 u2 = (xf * vec3(0.0, 0.5, 1)).xy;
+            vec2 u3 = (xf * vec3(0.5, 0.5, 1)).xy;
+            vec2 u4 = (xf * vec3(0.0, 0.0, 1)).xy;
+            //vec2 u5 = (xf * vec3(0.0, 0.0, 1)).xy;
+            vec2 u6 = (xf * vec3(0.5, 0.0, 1)).xy;
+            vec2 u7 = (xf * vec3(0.5, 0.5, 1)).xy;
+            vec2 u8 = (xf * vec3(1.0, 0.0, 1)).xy;
+            genVertex(v, u1);
+            genVertex(v, u2);
+            genVertex(v, u3);
+            genVertex(v, u4);
+            genVertex(v, u4);
+            genVertex(v, u6);
+            genVertex(v, u7);
+            genVertex(v, u8);
+        }
+        EndPrimitive();
+#endif
     }
 
 }
