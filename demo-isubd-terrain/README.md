@@ -8,7 +8,7 @@ Specifically, the demo provides up to 4 rendering techniques:
 
 * *Compute Shader* -- Similar to that of the original article; original demo available here: https://github.com/jadkhoury/TessellationDemo
 
-* *Tesselation Shader* -- Single-pass rendering with tessellation shaders; the tessellation shader produces a grid with *fixed* 
+* *Tessellation Shader* -- Single-pass rendering with tessellation shaders; the tessellation shader produces a grid with *fixed* 
 tessellation factors
 
 * *Geometry Shader* -- Single-pass rendering with a geometry shader; the geometry shader produces a grid with *fixed* 
