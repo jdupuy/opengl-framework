@@ -98,7 +98,7 @@ struct TerrainManager {
 } g_terrain = {
     {true, true, false, false, true},
     {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.3f},
-    METHOD_TS, 5,
+    METHOD_GS, 5,
     SHADING_DIFFUSE,
     3,
     0,
@@ -448,10 +448,15 @@ bool loadTerrainProgram()
     if (g_terrain.method == METHOD_TS) {
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
     } else if (g_terrain.method == METHOD_GS) {
-        int subdLevel = g_terrain.gpuSubd * 2;
-        int vertexCnt = (2 << subdLevel) + 1;
+        int subdLevel = g_terrain.gpuSubd;
+        int vertexCnt;
 
-        djgp_push_string(djp, "#define VERTICES_OUT %i\n", vertexCnt);
+        if (subdLevel == 0)
+            vertexCnt = 2;
+        else
+            vertexCnt = 4 << (2 * subdLevel - 1);
+
+        djgp_push_string(djp, "#define MAX_VERTICES %i\n", vertexCnt);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
     } else if (g_terrain.method == METHOD_CS) {
         djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);

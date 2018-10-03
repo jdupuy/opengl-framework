@@ -81,7 +81,7 @@ void main(void)
  */
 #ifdef GEOMETRY_SHADER
 layout(points) in;
-layout(triangle_strip, max_vertices = 256) out;
+layout(triangle_strip, max_vertices = MAX_VERTICES) out;
 layout(location = 0) out vec2 o_TexCoord;
 
 float computeLod(vec3 c)
@@ -188,49 +188,28 @@ void main()
     if (true) {
 #endif // FLAG_CULL
         /*
-            This routine generates a tessellated triangle with independent triangles
-        */
-#if 0
-        int subdLevel = PATCH_SUBD_LEVEL*2;
-        int primCnt   = 1 << subdLevel;
-        // other triangles
-        for (int i = 0; i < primCnt; ++i) {
-            uint key = i + primCnt;
-            mat3 xf = keyToXform(key);
-            vec2 u1 = (xf * vec3(0, 0, 1)).xy;
-            vec2 u2 = (xf * vec3(1, 0, 1)).xy;
-            vec2 u3 = (xf * vec3(0, 1, 1)).xy;
-
-            genVertex(v, u1);
-            genVertex(v, u2);
-            genVertex(v, u3);
-            EndPrimitive();
-        }
-#else
-        /*
             This routine generates a tessellated triangle with a single triangle strip
         */
-        int subdLevel = max(0, PATCH_SUBD_LEVEL - 1) * 2;
+#if PATCH_SUBD_LEVEL == 0
+        genVertex(v, vec2(0, 0));
+        genVertex(v, vec2(1, 0));
+        genVertex(v, vec2(0, 1));
+        EndPrimitive();
+#else
+        int subdLevel = 2 * PATCH_SUBD_LEVEL - 1;
         int stripCnt = 1 << subdLevel;
+
         for (int i = 0; i < stripCnt; ++i) {
             uint key = i + stripCnt;
             mat3 xf = keyToXform(key);
             vec2 u1 = (xf * vec3(0.0, 1.0, 1)).xy;
-            vec2 u2 = (xf * vec3(0.0, 0.5, 1)).xy;
+            vec2 u2 = (xf * vec3(0.0, 0.0, 1)).xy;
             vec2 u3 = (xf * vec3(0.5, 0.5, 1)).xy;
-            vec2 u4 = (xf * vec3(0.0, 0.0, 1)).xy;
-            //vec2 u5 = (xf * vec3(0.0, 0.0, 1)).xy;
-            vec2 u6 = (xf * vec3(0.5, 0.0, 1)).xy;
-            vec2 u7 = (xf * vec3(0.5, 0.5, 1)).xy;
-            vec2 u8 = (xf * vec3(1.0, 0.0, 1)).xy;
+            vec2 u4 = (xf * vec3(1.0, 0.0, 1)).xy;
             genVertex(v, u1);
             genVertex(v, u2);
             genVertex(v, u3);
             genVertex(v, u4);
-            genVertex(v, u4);
-            genVertex(v, u6);
-            genVertex(v, u7);
-            genVertex(v, u8);
         }
         EndPrimitive();
 #endif
