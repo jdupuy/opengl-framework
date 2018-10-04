@@ -452,7 +452,7 @@ bool loadTerrainProgram()
         int vertexCnt;
 
         if (subdLevel == 0)
-            vertexCnt = 2;
+            vertexCnt = 3;
         else
             vertexCnt = 4 << (2 * subdLevel - 1);
 
