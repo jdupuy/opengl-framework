@@ -188,7 +188,10 @@ void main()
     if (true) {
 #endif // FLAG_CULL
         /*
-            This routine generates a tessellated triangle with a single triangle strip
+            The code below generates a tessellated triangle with a single triangle strip.
+            The algorithm instances strips of 4 vertices, which produces 2 triangles.
+            This is why there is a special case for subd_level == 0, where we expect
+            only one triangle.
         */
 #if PATCH_SUBD_LEVEL == 0
         genVertex(v, vec2(0, 0));
