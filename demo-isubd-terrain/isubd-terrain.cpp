@@ -449,12 +449,7 @@ bool loadTerrainProgram()
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
     } else if (g_terrain.method == METHOD_GS) {
         int subdLevel = g_terrain.gpuSubd;
-        int vertexCnt;
-
-        if (subdLevel == 0)
-            vertexCnt = 3;
-        else
-            vertexCnt = 4 << (2 * subdLevel - 1);
+        int vertexCnt = subdLevel == 0 ? 3 : 4 << (2 * subdLevel - 1);
 
         djgp_push_string(djp, "#define MAX_VERTICES %i\n", vertexCnt);
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
