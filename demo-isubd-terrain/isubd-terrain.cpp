@@ -927,61 +927,105 @@ bool loadGeometryBuffers()
  * index and vertex buffer. Note that this buffer is only relevant
  * for the compute-shader based pipline.
  */
+
+dja::mat3 bitToXform(uint32_t bit)
+{
+    float s = float(bit) - 0.5f;
+    dja::vec3 c1 = dja::vec3(s , -0.5 , 0);
+    dja::vec3 c2 = dja::vec3(-0.5, -s , 0);
+    dja::vec3 c3 = dja::vec3(+0.5,+0.5, 1);
+
+    return dja::transpose(dja::mat3(c1, c2, c3));
+}
+
+dja::mat3 keyToXform(uint32_t key)
+{
+    dja::mat3 xf = dja::mat3(1.f);
+
+    while (key > 1u) {
+        xf = bitToXform(key & 1u) * xf;
+        key = key >> 1u;
+    }
+
+    return xf;
+}
+
 bool loadInstancedGeometryBuffers()
 {
-    int sliceCnt = (1 << g_terrain.gpuSubd) + 1;     // side vertices;
-    int vertexCnt = (sliceCnt * (sliceCnt + 1)) / 2;
-    int indexCnt = 3 << (g_terrain.gpuSubd * 2);
-    std::vector<dja::vec2> vertices(vertexCnt);
-    std::vector<uint32_t> indexes(indexCnt);
-
-    LOG("Loading {Instanced-Vertex-Buffer}\n");
-    for (int i = 0; i < sliceCnt; ++i)
-    for (int j = 0; j < i + 1; ++j) {
-        int idx = i * (i + 1) / 2 + j;
-        float u = (float)j / (sliceCnt - 1);
-        float v = 1.f - (float)i / (sliceCnt - 1);
-
-        vertices[idx] = dja::vec2(u, v);
-    }
     if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]))
         glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
     glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
     glBindBuffer(GL_ARRAY_BUFFER,
                  g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
-    glBufferData(GL_ARRAY_BUFFER,
-                 sizeof(vertices[0]) * vertexCnt,
-                 (const void*)&vertices[0],
-                 GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    LOG("Loading {Instanced-Index-Buffer}\n");
-    for (int i = 0; i < sliceCnt - 1; ++i) {
-        uint32_t *index = &indexes[3 * i * i];
-
-        for (int j = 0; j < i; ++j) {
-            index[0] = (i + 1) * (i + 2) / 2 + j;
-            index[1] = (i + 1) * (i + 2) / 2 + j + 1;
-            index[2] =  i      * (i + 1) / 2 + j;
-            index[3] = index[2];
-            index[4] = index[1];
-            index[5] = index[2] + 1;
-            index+= 6;
-        }
-
-        index[0] = (i + 1) * (i + 2) / 2 + i;
-        index[1] = (i + 2) * (i + 3) / 2 - 1;
-        index[2] = (i + 1) * (i + 2) / 2 - 1;
-    }
     if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]))
         glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
     glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
                  g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 sizeof(indexes[0]) * indexCnt,
-                 (const void *)&indexes[0],
-                 GL_STATIC_DRAW);
+
+    if (g_terrain.gpuSubd == 0) {
+        const dja::vec2 vertices[] = {
+            {0.0f, 0.0f},
+            {1.0f, 0.0f},
+            {0.0f, 1.0f}
+        };
+        const uint16_t indexes[] = {0u, 1u, 2u};
+
+        LOG("Loading {Instanced-Vertex-Buffer}\n");
+        glBufferData(GL_ARRAY_BUFFER,
+                     sizeof(vertices),
+                     vertices,
+                     GL_STATIC_DRAW);
+
+        LOG("Loading {Instanced-Index-Buffer}\n");
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     sizeof(indexes),
+                     indexes,
+                     GL_STATIC_DRAW);
+    } else {
+        int subdLevel = 2 * g_terrain.gpuSubd - 1;
+        int stripCnt = 1 << subdLevel;
+        int triangleCnt = stripCnt * 2;
+        std::vector<dja::vec2> vertices(stripCnt * 4);
+        std::vector<uint16_t> indexes(triangleCnt * 3);
+
+        LOG("Loading {Instanced-Vertex-Buffer}\n");
+        for (int i = 0; i < stripCnt; ++i) {
+            uint32_t key = i + stripCnt;
+            dja::mat3 xf = keyToXform(key);
+            dja::vec3 u1 = xf * dja::vec3(0.0f, 1.0f, 1.0f);
+            dja::vec3 u2 = xf * dja::vec3(0.0f, 0.0f, 1.0f);
+            dja::vec3 u3 = xf * dja::vec3(0.5f, 0.5f, 1.0f);
+            dja::vec3 u4 = xf * dja::vec3(1.0f, 0.0f, 1.0f);
+
+            // make sure triangle array is counter-clockwise
+            if (subdLevel & 1) std::swap(u2, u3);
+
+            vertices[    4 * i] = dja::vec2(u1.x, u1.y);
+            vertices[1 + 4 * i] = dja::vec2(u2.x, u2.y);
+            vertices[2 + 4 * i] = dja::vec2(u3.x, u3.y);
+            vertices[3 + 4 * i] = dja::vec2(u4.x, u4.y);
+        }
+        glBufferData(GL_ARRAY_BUFFER,
+                     sizeof(vertices[0]) * vertices.size(),
+                     (const void*)&vertices[0],
+                     GL_STATIC_DRAW);
+
+        LOG("Loading {Instanced-Index-Buffer}\n");
+        for (int i = 0; i < triangleCnt; ++i) {
+            int e = i & 1; // 0 if even, 1 if odd
+
+            indexes[    3 * i] = i * 2;
+            indexes[1 + 3 * i] = i * 2 + 1 - 2 * e;
+            indexes[2 + 3 * i] = i * 2 + 2 - e;
+        }
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     sizeof(indexes[0]) * indexes.size(),
+                     (const void *)&indexes[0],
+                     GL_STATIC_DRAW);
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     return (glGetError() == GL_NO_ERROR);
@@ -1092,7 +1136,8 @@ bool streamSubdCounterBuffer(int *bufferOffset = NULL)
         /* num_groups_x, num_groups_y, num_groups_z, align[5] */
         IndirectCommand dispatch = {0u, 1u, 1u, 0u, 0u, 0u, 0u, 0u};
         /* count, primCount, firstIndex, baseVertex, baseInstance, align[3];*/
-        const uint32_t cnt = 3u << (g_terrain.gpuSubd * 2u);
+        const int subdLevel = 2 * g_terrain.gpuSubd - 1;
+        const uint32_t cnt = subdLevel > 0 ? 6u << subdLevel : 3u;
         IndirectCommand drawElements = {cnt, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
 
         // upload to GPU
@@ -1563,6 +1608,8 @@ void renderSceneCs() {
 
     // update the subd buffers
     if (g_terrain.flags.reset) {
+        const int subdLevel = 2 * g_terrain.gpuSubd - 1;
+        const uint32_t cnt = subdLevel > 0 ? 6u << subdLevel : 3u;
         GLuint dummyBuffer;
         GLuint dummyBufferData = 2u;
         IndirectCommand cmd = {
@@ -1609,8 +1656,8 @@ void renderSceneCs() {
         glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
         glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_INSTANCED_GRID]);
         glDrawElementsInstanced(GL_TRIANGLES,
-                                3u << (g_terrain.gpuSubd * 2u),
-                                GL_UNSIGNED_INT,
+                                cnt,
+                                GL_UNSIGNED_SHORT,
                                 BUFFER_OFFSET(0),
                                 2);
 
@@ -1660,7 +1707,7 @@ void renderSceneCs() {
         djgb_glbind(g_gl.streams[STREAM_CULLED_SUBD_COUNTER],
                     GL_DRAW_INDIRECT_BUFFER);
         glDrawElementsIndirect(GL_TRIANGLES,
-                               GL_UNSIGNED_INT,
+                               GL_UNSIGNED_SHORT,
                                BUFFER_OFFSET(offset));
 
         // update batch
