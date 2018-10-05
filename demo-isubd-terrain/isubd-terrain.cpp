@@ -1926,6 +1926,7 @@ void renderGui(double cpuDt, double gpuDt)
             }
             if (ImGui::SliderFloat("DmapScale", &g_terrain.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
+                configureSubdCsLodProgram();
             }
             if (g_terrain.method == METHOD_CS || g_terrain.method == METHOD_MS) {
                 char buf[64];
