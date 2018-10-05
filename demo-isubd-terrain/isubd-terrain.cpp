@@ -97,7 +97,7 @@ struct TerrainManager {
     float primitivePixelLengthTarget;
 } g_terrain = {
     {true, true, false, false, true},
-    {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.3f},
+    {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.45f},
     METHOD_GS, 5,
     SHADING_DIFFUSE,
     3,
@@ -1906,8 +1906,9 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::Checkbox("wire", &g_terrain.flags.wire);
             ImGui::SameLine();
             if (ImGui::Checkbox("freeze", &g_terrain.flags.freeze)) {
-                loadSubdCsLodProgram();
                 loadTerrainProgram();
+                if (g_terrain.method == METHOD_CS)
+                    configureSubdCsLodProgram();
             }
             if (!g_terrain.dmap.pathToFile.empty()) {
                 ImGui::SameLine();
@@ -1922,11 +1923,13 @@ void renderGui(double cpuDt, double gpuDt)
             }
             if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 16)) {
                 configureTerrainProgram();
-                configureSubdCsLodProgram();
+                if (g_terrain.method == METHOD_CS)
+                    configureSubdCsLodProgram();
             }
             if (ImGui::SliderFloat("DmapScale", &g_terrain.dmap.scale, 0.f, 1.f)) {
                 configureTerrainProgram();
-                configureSubdCsLodProgram();
+                if (g_terrain.method == METHOD_CS)
+                    configureSubdCsLodProgram();
             }
             if (g_terrain.method == METHOD_CS || g_terrain.method == METHOD_MS) {
                 char buf[64];
