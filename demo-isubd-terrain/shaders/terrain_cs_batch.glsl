@@ -10,7 +10,7 @@ struct IndirectCommand {
     uint local_size_y;
     uint local_size_z;
     uint align[5];
-#elif FLAG MESH PATH
+#elif FLAG_MESH_PATH
     uint count;
     uint first;
     uint align[6];
@@ -32,7 +32,7 @@ void main()
 
 #if FLAG_COMPUTE_PATH
     u_IndirectCommand.local_size_x = cnt;
-#elif FLAG MESH PATH
+#elif FLAG_MESH_PATH
     u_IndirectCommand.count = cnt;
 #endif
 }
