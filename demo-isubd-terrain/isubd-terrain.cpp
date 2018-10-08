@@ -44,6 +44,9 @@
 #   define PATH_TO_ASSSET_DIRECTORY "../assets/"
 #endif
 
+//Forces use of ad-hoc instanced geometry definition, with better vertex reuse
+#define USE_ADHOC_INSTANCED_GEOM		1
+
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 //
@@ -100,7 +103,7 @@ struct TerrainManager {
     {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.45f},
     METHOD_GS, 5,
     SHADING_DIFFUSE,
-    3,
+    3,	//
     0,
     5.f
 };
@@ -212,6 +215,20 @@ struct OpenGLManager {
 
 int instancedMeshVertexCount = 0;
 int instancedMeshPrimitiveCount = 0;
+
+
+//Early declarations of ad-hoc instanced geom vertex/index buffers
+extern const dja::vec2 verticesL0[3];
+extern const uint16_t indexesL0[3];
+
+extern const dja::vec2 verticesL1[6];
+extern const uint16_t indexesL1[12];
+
+extern const dja::vec2 verticesL2[15];
+extern const uint16_t indexesL2[48];
+
+extern const dja::vec2 verticesL3[45];
+extern const uint16_t indexesL3[192];
 
 ////////////////////////////////////////////////////////////////////////////////
 // Utility functions
@@ -1080,39 +1097,52 @@ bool loadInstancedGeometryBuffers()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
                  g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
 
-    if (g_terrain.gpuSubd == 0) {
-        const dja::vec2 vertices[] = {
-            {0.0f, 0.0f},
-            {1.0f, 0.0f},
-            {0.0f, 1.0f}
-        };
-        const uint16_t indexes[] = {0u, 1u, 2u};
+	bool buffAllocated = false;
+	dja::vec2 *vertices;
+	uint16_t *indexes;
+
+
+	if (g_terrain.gpuSubd == 0) {
 		
 		instancedMeshVertexCount = 3;
 		instancedMeshPrimitiveCount = 1;
 
-        LOG("Loading {Instanced-Vertex-Buffer}\n");
-        glBufferData(GL_ARRAY_BUFFER,
-                     sizeof(vertices),
-                     vertices,
-                     GL_STATIC_DRAW);
+		vertices = (dja::vec2 *)verticesL0;
+		indexes = (uint16_t *)indexesL0;
+	} 
+#if USE_ADHOC_INSTANCED_GEOM
+	else if ( g_terrain.gpuSubd == 1) {
+		instancedMeshVertexCount = 6;
+		instancedMeshPrimitiveCount = 4;
 
-        LOG("Loading {Instanced-Index-Buffer}\n");
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     sizeof(indexes),
-                     indexes,
-                     GL_STATIC_DRAW);
-    } else {
+		vertices = (dja::vec2 *)verticesL1;
+		indexes = (uint16_t *)indexesL1;
+    } else if ( g_terrain.gpuSubd == 2 ) {
+		instancedMeshVertexCount = 15;
+		instancedMeshPrimitiveCount = 16;
+
+		vertices = (dja::vec2 *)verticesL2;
+		indexes = (uint16_t *)indexesL2;
+	} else if (g_terrain.gpuSubd == 3) {
+		instancedMeshVertexCount = 45;
+		instancedMeshPrimitiveCount = 64;
+
+		vertices = (dja::vec2 *)verticesL3;
+		indexes = (uint16_t *)indexesL3;
+	} 
+#endif
+	else {
         int subdLevel = 2 * g_terrain.gpuSubd - 1;
         int stripCnt = 1 << subdLevel;
         int triangleCnt = stripCnt * 2;
 
 		instancedMeshVertexCount = stripCnt*4;
 		instancedMeshPrimitiveCount = triangleCnt;
-        std::vector<dja::vec2> vertices(instancedMeshVertexCount);
-        std::vector<uint16_t> indexes(instancedMeshPrimitiveCount * 3);
 
-        LOG("Loading {Instanced-Vertex-Buffer}\n");
+		vertices = new dja::vec2[instancedMeshVertexCount];
+		indexes = new uint16_t[instancedMeshPrimitiveCount * 3];
+		buffAllocated = true;
+
         for (int i = 0; i < stripCnt; ++i) {
             uint32_t key = i + stripCnt;
             dja::mat3 xf = keyToXform(key);
@@ -1129,12 +1159,7 @@ bool loadInstancedGeometryBuffers()
             vertices[2 + 4 * i] = dja::vec2(u3.x, u3.y);
             vertices[3 + 4 * i] = dja::vec2(u4.x, u4.y);
         }
-        glBufferData(GL_ARRAY_BUFFER,
-                     sizeof(vertices[0]) * vertices.size(),
-                     (const void*)&vertices[0],
-                     GL_STATIC_DRAW);
-
-        LOG("Loading {Instanced-Index-Buffer}\n");
+        
         for (int i = 0; i < triangleCnt; ++i) {
             int e = i & 1; // 0 if even, 1 if odd
 
@@ -1142,11 +1167,27 @@ bool loadInstancedGeometryBuffers()
             indexes[1 + 3 * i] = i * 2 + 1 - 2 * e;
             indexes[2 + 3 * i] = i * 2 + 2 - e;
         }
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     sizeof(indexes[0]) * indexes.size(),
-                     (const void *)&indexes[0],
-                     GL_STATIC_DRAW);
     }
+
+
+	LOG("Loading {Instanced-Vertex-Buffer}\n");
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(dja::vec2) * instancedMeshVertexCount,
+		(const void*)vertices,
+		GL_STATIC_DRAW);
+
+	LOG("Loading {Instanced-Index-Buffer}\n");
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+		sizeof(uint16_t) * instancedMeshPrimitiveCount * 3,
+		(const void *)indexes,
+		GL_STATIC_DRAW);
+
+
+	if (buffAllocated) {
+		delete [] vertices;
+		delete [] indexes;
+	}
+
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -1991,6 +2032,9 @@ void renderGui(double cpuDt, double gpuDt)
                 loadInstancedGeometryVertexArray();
 				loadPrograms();
                 g_terrain.flags.reset = true;
+
+				LOG("Patch Vertex Count: %d\nPatch Primitive Count: %d\n", instancedMeshVertexCount, instancedMeshPrimitiveCount);
+
             }
             if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 16)) {
                 configureTerrainProgram();
@@ -2241,4 +2285,203 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+////Instanced patch geometry at various subdiv levels////
+
+//gpuSubd == 0
+const dja::vec2 verticesL0[] = {
+	{ 0.0f, 0.0f },
+	{ 1.0f, 0.0f },
+	{ 0.0f, 1.0f }
+};
+const uint16_t indexesL0[] = { 0u, 1u, 2u };
+
+//gpuSubd == 1
+const dja::vec2 verticesL1[] = {
+	{ 0.0f, 1.0f },
+	{ 0.5f, 0.5f },
+	{ 0.0f, 0.5f },
+	{ 0.0f, 0.0f },
+	{ 0.5f, 0.0f },
+	{ 1.0f, 0.0f }
+};
+const uint16_t indexesL1[] = {
+	1u, 0u, 2u,
+	1u, 2u, 3u,
+	1u, 3u, 4u,
+	1u, 4u, 5u 
+};
+
+//gpuSubd == 2
+const dja::vec2 verticesL2[] = {
+	{ 0.25f, 0.75f },
+	{ 0.0f, 1.0f },
+	{ 0.0f, 0.75f },
+	{ 0.0f, 0.5f },
+	{ 0.25f, 0.5f },
+	{ 0.5f, 0.5f },
+
+	{ 0.25f, 0.25f },
+	{ 0.0f, 0.25f },
+	{ 0.0f, 0.0f },
+	{ 0.25f, 0.0f },
+	{ 0.5f, 0.0f },
+	{ 0.5f, 0.25f },
+	{ 0.75f, 0.25f },
+	{ 0.75f, 0.0f },
+	{ 1.0f, 0.0f }		//14
+};
+const uint16_t indexesL2[] = {
+	0u, 1u, 2u,
+	0u, 2u, 3u,
+	0u, 3u, 4u,
+	0u, 4u, 5u,
+
+	6u, 5u, 4u,
+	6u, 4u, 3u,
+	6u, 3u, 7u,
+	6u, 7u, 8u,
+
+	6u, 8u, 9u,
+	6u, 9u, 10u,
+	6u, 10u, 11u,
+	6u, 11u, 5u,
+
+	12u, 5u, 11u,
+	12u, 11u, 10u,
+	12u, 10u, 13u,
+	12u, 13u, 14u
+};
+
+//gpuSubd == 3
+const dja::vec2 verticesL3[] = {
+	{ 0.25f*0.5f, 0.75f*0.5f + 0.5f },
+	{ 0.0f*0.5f, 1.0f*0.5f + 0.5f },
+	{ 0.0f*0.5f, 0.75f*0.5f + 0.5f },
+	{ 0.0f*0.5f , 0.5f*0.5f + 0.5f },
+	{ 0.25f*0.5f, 0.5f*0.5f + 0.5f },
+	{ 0.5f*0.5f, 0.5f*0.5f + 0.5f },
+	{ 0.25f*0.5f, 0.25f*0.5f + 0.5f },
+	{ 0.0f*0.5f, 0.25f*0.5f + 0.5f },
+	{ 0.0f*0.5f, 0.0f*0.5f + 0.5f },
+	{ 0.25f*0.5f, 0.0f*0.5f + 0.5f },
+	{ 0.5f*0.5f, 0.0f*0.5f + 0.5f },
+	{ 0.5f*0.5f, 0.25f*0.5f + 0.5f },
+	{ 0.75f*0.5f, 0.25f*0.5f + 0.5f },
+	{ 0.75f*0.5f, 0.0f*0.5f + 0.5f },
+	{ 1.0f*0.5f, 0.0f*0.5f + 0.5f },		//14
+
+	{ 0.375f, 0.375f },
+	{ 0.25f, 0.375f },
+	{ 0.25f, 0.25f },
+	{ 0.375f, 0.25f },
+	{ 0.5f, 0.25f },
+	{ 0.5f, 0.375f },	//20
+
+	{ 0.125f, 0.375f },
+	{ 0.0f, 0.375f },
+	{ 0.0f, 0.25f },
+	{ 0.125f, 0.25f },	//24
+
+	{ 0.125f, 0.125f },
+	{ 0.0f, 0.125f },
+	{ 0.0f, 0.0f },
+	{ 0.125f, 0.0f },
+	{ 0.25f, 0.0f },
+	{ 0.25f, 0.125f },	//30
+
+	{ 0.375f, 0.125f },
+	{ 0.375f, 0.0f },
+	{ 0.5f, 0.0f },
+	{ 0.5f, 0.125f },	//34
+
+	{ 0.625f, 0.375f },
+	{ 0.625f, 0.25f },
+	{ 0.75f, 0.25f },	//37
+
+	{ 0.625f, 0.125f },
+	{ 0.625f, 0.0f },
+	{ 0.75f, 0.0f },
+	{ 0.75f, 0.125f },	//41
+
+	{ 0.875f, 0.125f },
+	{ 0.875f, 0.0f },
+	{ 1.0f, 0.0f }	//44
+};
+const uint16_t indexesL3[] = {
+	0u, 1u, 2u,
+	0u, 2u, 3u,
+	0u, 3u, 4u,
+	0u, 4u, 5u,
+
+	6u, 5u, 4u,
+	6u, 4u, 3u,
+	6u, 3u, 7u,
+	6u, 7u, 8u,
+
+	6u, 8u, 9u,
+	6u, 9u, 10u,
+	6u, 10u, 11u,
+	6u, 11u, 5u,
+
+	12u, 5u, 11u,
+	12u, 11u, 10u,
+	12u, 10u, 13u,
+	12u, 13u, 14u,		//End fo fist big triangle
+
+	15u, 14u, 13u,
+	15u, 13u, 10u,
+	15u, 10u, 16u,
+	15u, 16u, 17u,
+	15u, 17u, 18u,
+	15u, 18u, 19u,
+	15u, 19u, 20u,
+	15u, 20u, 14u,
+
+	21u, 10u, 9u,
+	21u, 9u, 8u,
+	21u, 8u, 22u,
+	21u, 22u, 23u,
+	21u, 23u, 24u,
+	21u, 24u, 17u,
+	21u, 17u, 16u,
+	21u, 16u, 10u,
+
+	25u, 17u, 24u,
+	25u, 24u, 23u,
+	25u, 23u, 26u,
+	25u, 26u, 27u,
+	25u, 27u, 28u,
+	25u, 28u, 29u,
+	25u, 29u, 30u,
+	25u, 30u, 17u,
+
+	31u, 19u, 18u,
+	31u, 18u, 17u,
+	31u, 17u, 30u,
+	31u, 30u, 29u,
+	31u, 29u, 32u,
+	31u, 32u, 33u,
+	31u, 33u, 34u,
+	31u, 34u, 19u,
+
+	35u, 14u, 20u,
+	35u, 20u, 19u,
+	35u, 19u, 36u,
+	35u, 36u, 37u,
+
+	38u, 37u, 36u,
+	38u, 36u, 19u,
+	38u, 19u, 34u,
+	38u, 34u, 33u,
+	38u, 33u, 39u,
+	38u, 39u, 40u,
+	38u, 40u, 41u,
+	38u, 41u, 37u,
+
+	42u, 37u, 41u,
+	42u, 41u, 40u,
+	42u, 40u, 43u,
+	42u, 43u, 44u
+};
 

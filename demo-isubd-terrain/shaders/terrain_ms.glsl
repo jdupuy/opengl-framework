@@ -95,6 +95,12 @@ float distanceToLod(float z, float lodFactor)
     return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
 }
 
+
+//#define MeshPatchAttributes() vec4 vertices[3]; uint key; 
+#define MeshPatchAttributes() vec4 vertices0; vec4 vertices1; vec2 vertices2;
+
+
+
 // -----------------------------------------------------------------------------
 /**
  * Task Shader
@@ -105,10 +111,16 @@ float distanceToLod(float z, float lodFactor)
 #ifdef TASK_SHADER
 layout(local_size_x = COMPUTE_THREAD_COUNT) in;
 
+#if 0
 taskNV out Patch {
-    vec4 vertices[3];
-    uint key;
+	MeshPatchAttributes()
 } o_Patch[COMPUTE_THREAD_COUNT];
+#else
+taskNV out Patch{
+	vec4 vertices[3* COMPUTE_THREAD_COUNT];
+} o_Patch;
+#endif
+
 
 float computeLod(vec3 c)
 {
@@ -127,6 +139,11 @@ float computeLod(in vec4 v[3])
 {
     vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
     return computeLod(c);
+}
+float computeLod(in vec3 v[3])
+{
+	vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
+	return computeLod(c);
 }
 
 void writeKey(uint primID, uint key)
@@ -184,13 +201,12 @@ void main()
 
 	bool isVisible = true;
 	
-	uint key; vec4 v[3];
+	uint key; vec3 v[3];
 
     // early abort if the threadID exceeds the size of the subdivision buffer
 	//if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) 
 	if ( threadID >= u_IndirectCommand[7] )
 	{
-		gl_TaskCountNV = 0;	//Removes last processed triangle
 
 		isVisible = false;
 		//return;
@@ -199,15 +215,15 @@ void main()
 		// get coarse triangle associated to the key
 		//CC: Why loading that from VRAM ??
 		uint primID = u_SubdBufferIn[threadID].x;
-		vec4 v_in[3] = vec4[3](
-			u_VertexBuffer[u_IndexBuffer[primID * 3]],
-			u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
-			u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
+		vec3 v_in[3] = vec3[3](
+			u_VertexBuffer[u_IndexBuffer[primID * 3]].xyz,
+			u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]].xyz,
+			u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]].xyz
 			);
 
 		// compute distance-based LOD
 		key = u_SubdBufferIn[threadID].y;
-		vec4 vp[3]; subd(key, v_in, v, vp);
+		vec3 vp[3]; subd(key, v_in, v, vp);
 		int targetLod = int(computeLod(v));
 		int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -219,8 +235,8 @@ void main()
 #if FLAG_CULL
 		// Cull invisible nodes
 		mat4 mvp = u_Transform.modelViewProjection;
-		vec4 bmin = min(min(v[0], v[1]), v[2]);
-		vec4 bmax = max(max(v[0], v[1]), v[2]);
+		vec3 bmin = min(min(v[0], v[1]), v[2]);
+		vec3 bmax = max(max(v[0], v[1]), v[2]);
 
 		// account for displacement in bound computations
 #   if FLAG_DISPLACE
@@ -254,8 +270,24 @@ void main()
 		uint idxOffset = bitCount(voteVisible & gl_ThreadLtMaskNV);
 
         // set output data
-        o_Patch[idxOffset].vertices = v;
-        o_Patch[idxOffset].key = key;
+        //o_Patch[idxOffset].vertices = v;
+#if 0
+		o_Patch[idxOffset].vertices = vec4[3](vec4(v[0], 1.0), vec4(v[1], 1.0), vec4(v[2], 1.0));
+		o_Patch[idxOffset].key = key;
+#elif 0
+		o_Patch[idxOffset].vertices0.xyz = v[0].xyz;
+		o_Patch[idxOffset].vertices0.w = v[1].x;
+		o_Patch[idxOffset].vertices1.xy = v[1].yz;
+		o_Patch[idxOffset].vertices1.zw = v[2].xy;
+		o_Patch[idxOffset].vertices2.x = v[2].z;
+		o_Patch[idxOffset].vertices2.y = uintBitsToFloat(key);
+#else
+		o_Patch.vertices[idxOffset * 3 + 0] = vec4(v[0].xyz, v[1].x);
+		o_Patch.vertices[idxOffset * 3 + 1] = vec4(v[1].yz, v[2].xy);
+		o_Patch.vertices[idxOffset * 3 + 2] = vec4(v[2].z, uintBitsToFloat(key), 0.0, 0.0);
+		//o_Patch.key[idxOffset] = key;
+#endif
+        
        
 		//if(gl_LocalInvocationID.x == 1)
 		//	gl_TaskCountNV = 0;
@@ -273,7 +305,6 @@ void main()
  * geometry properly on the input mesh (here a terrain).
  */
 #ifdef MESH_SHADER
-#line 1
 
 const int gpuSubd = PATCH_SUBD_LEVEL;
 
@@ -282,10 +313,16 @@ layout(local_size_x = COMPUTE_THREAD_COUNT) in;
 layout(max_vertices = INSTANCED_MESH_VERTEX_COUNT, max_primitives = INSTANCED_MESH_PRIMITIVE_COUNT) out;
 layout(triangles) out;
 
+#if 0
 taskNV in Patch {
-    vec4 vertices[3];
-    uint key;
+	MeshPatchAttributes()
 } i_Patch[COMPUTE_THREAD_COUNT];
+#else
+taskNV in Patch{
+	vec4 vertices[3 * COMPUTE_THREAD_COUNT];
+} i_Patch;
+#endif
+
 
 layout(location = 0) out Interpolants{
     vec2 o_TexCoord;
@@ -293,7 +330,7 @@ layout(location = 0) out Interpolants{
 
 void main()
 {
-#line 242
+
 #define NUM_CLIPPING_PLANES 6
 	//int id = int(gl_LocalInvocationID.x);
 	int id = int(gl_WorkGroupID.x);
@@ -409,31 +446,39 @@ void main()
 
 #elif 1
 	//Multi-threads, *load* instanced geom
-
+#if 0
 	vec3 v[3] = vec3[3](
 		i_Patch[id].vertices[0].xyz,
 		i_Patch[id].vertices[1].xyz,
 		i_Patch[id].vertices[2].xyz
 		);
+
 	uint key = i_Patch[id].key;
+#elif 0
+	vec3 v[3] = vec3[3](
+		i_Patch[id].vertices0.xyz,
+		vec3(i_Patch[id].vertices0.w, i_Patch[id].vertices1.xy),
+		vec3(i_Patch[id].vertices1.zw, i_Patch[id].vertices2.x)
+		);
+
+	uint key = floatBitsToUint(i_Patch[id].vertices2.y);
+#else
+	vec3 v[3] = vec3[3](
+		i_Patch.vertices[id * 3 + 0].xyz,
+		vec3(i_Patch.vertices[id * 3 + 0].w, i_Patch.vertices[id * 3 + 1].xy),
+		vec3(i_Patch.vertices[id * 3 + 1].zw, i_Patch.vertices[id * 3 + 2].x)
+		);
+
+	uint key = floatBitsToUint(i_Patch.vertices[id * 3 + 2].y);
+#endif
+	
 
 	
-	int triangleCnt;
-	int vertexCnt;
+	
+	const int vertexCnt = INSTANCED_MESH_VERTEX_COUNT;
+	const int triangleCnt = INSTANCED_MESH_PRIMITIVE_COUNT;
+	const int indexCnt = triangleCnt * 3;
 
-	if (PATCH_SUBD_LEVEL == 0) {
-		triangleCnt = 1;
-		vertexCnt = 3;
-	}
-	else {
-		int subdLevel = 2 * PATCH_SUBD_LEVEL - 1;
-		int stripCnt = 1 << subdLevel;
-
-		triangleCnt = stripCnt * 2;
-		vertexCnt = stripCnt * 4;	
-	}
-
-	int indexCnt = triangleCnt * 3;
 	gl_PrimitiveCountNV = triangleCnt;
 
 

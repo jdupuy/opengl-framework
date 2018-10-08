@@ -101,4 +101,21 @@ void subd(in uint key, in vec4 v_in[3], out vec4 v_out[3], out vec4 v_out_p[3])
     v_out_p[1] = berp(v_in, u5);
     v_out_p[2] = berp(v_in, u6);
 }
+void subd(in uint key, in vec3 v_in[3], out vec3 v_out[3], out vec3 v_out_p[3])
+{
+	mat3 xfp; mat3 xf = keyToXform(key, xfp);
+	vec2 u1 = (xf * vec3(0, 0, 1)).xy;
+	vec2 u2 = (xf * vec3(1, 0, 1)).xy;
+	vec2 u3 = (xf * vec3(0, 1, 1)).xy;
+	vec2 u4 = (xfp * vec3(0, 0, 1)).xy;
+	vec2 u5 = (xfp * vec3(1, 0, 1)).xy;
+	vec2 u6 = (xfp * vec3(0, 1, 1)).xy;
 
+	v_out[0] = berp(v_in, u1);
+	v_out[1] = berp(v_in, u2);
+	v_out[2] = berp(v_in, u3);
+
+	v_out_p[0] = berp(v_in, u4);
+	v_out_p[1] = berp(v_in, u5);
+	v_out_p[2] = berp(v_in, u6);
+}
