@@ -1,18 +1,5 @@
 #line 2
 
-#define PATCH_TESS_LEVEL_LOG	3
-
-#if 0
-# define MESH_VERTEX_COUNT			126
-# define MESH_PRIMITIVE_COUNT		126
-#elif PATCH_TESS_LEVEL_LOG==2
-# define MESH_VERTEX_COUNT			15
-# define MESH_PRIMITIVE_COUNT		16
-#elif PATCH_TESS_LEVEL_LOG==3
-# define MESH_VERTEX_COUNT			45
-# define MESH_PRIMITIVE_COUNT		64
-#endif
-
 
 //#undef COMPUTE_THREAD_COUNT
 //#define COMPUTE_THREAD_COUNT 1
@@ -47,15 +34,22 @@ readonly buffer VertexBufferInstanced {
 
 layout(std430, binding = BUFFER_BINDING_INSTANCED_GEOMETRY_INDEXES)
 readonly buffer IndexBufferInstanced {
-	uint u_IndexBufferInstanced[];
+	uint16_t u_IndexBufferInstanced[];
 };
 
 
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
-layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
-uniform atomic_uint u_PreviousSubdBufferCounter;
+//Deprecated
+//layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
+//uniform atomic_uint u_PreviousSubdBufferCounter;
+
+layout(std430, binding = BUFFER_BINDING_INDIRECT_COMMAND)		//BUFFER_DISPATCH_INDIRECT
+buffer IndirectCommandBuffer {
+	uint u_IndirectCommand[8];
+};
+
 
 struct Transform {
     mat4 modelView;
@@ -73,6 +67,16 @@ uniform sampler2D u_DmapSampler; // displacement map
 uniform sampler2D u_SmapSampler; // slope map
 uniform float u_DmapFactor;
 uniform float u_LodFactor;
+
+
+vec2 intValToColor2(int keyLod) {
+	keyLod = keyLod % 64;
+
+	int bx = (keyLod & 0x1) | ((keyLod >> 1) & 0x2) | ((keyLod >> 2) & 0x4);
+	int by = ((keyLod >> 1) & 0x1) | ((keyLod >> 2) & 0x2) | ((keyLod >> 3) & 0x4);
+
+	return vec2(float(bx) / 7.0f, float(by) / 7.0f);
+}
 
 // displacement map
 float dmap(vec2 pos)
@@ -112,7 +116,8 @@ float computeLod(vec3 c)
     c.z += dmap(u_Transform.viewInv[3].xy);
 #endif
 
-    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
+	vec4 cxf4 = (u_Transform.modelView * vec4(c, 1));
+    vec3 cxf = cxf4.xyz;
     float z = length(cxf);
 
     return distanceToLod(z, u_LodFactor);
@@ -131,6 +136,7 @@ void writeKey(uint primID, uint key)
     u_SubdBufferOut[idx] = uvec2(primID, key);
 }
 
+
 void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 {
     // extract subdivision level associated to the key
@@ -143,13 +149,30 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
         writeKey(primID, children[0]);
         writeKey(primID, children[1]);
     } else if (/* keep ? */ keyLod < (parentLod + 1)) {
-        writeKey(primID, key);
+		writeKey(primID, key);
     } else /* merge ? */ {
-        if (/* is root ? */isRootKey(key)) {
-            writeKey(primID, key);
-        } else if (/* is zero child ? */isChildZeroKey(key)) {
-            writeKey(primID, parentKey(key));
-        }
+
+		if (/* is root ? */isRootKey(key)) 
+		{
+			writeKey(primID, key);
+		}
+#if 1
+		else if (/* is zero child ? */isChildZeroKey(key)) {
+			writeKey(primID, parentKey(key));
+		}
+#else
+		else {
+			int numMergeLevels = keyLod - (parentLod - 1);
+
+			uint mergeMask = (key & ((1 << numMergeLevels) - 1));
+			if (mergeMask == 0) 
+			{
+				key = (key >> numMergeLevels);
+				writeKey(primID, key);
+			}
+
+		}
+#endif
     }
 }
 
@@ -164,7 +187,9 @@ void main()
 	uint key; vec4 v[3];
 
     // early abort if the threadID exceeds the size of the subdivision buffer
-	if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) {
+	//if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) 
+	if ( threadID >= u_IndirectCommand[7] )
+	{
 		gl_TaskCountNV = 0;	//Removes last processed triangle
 
 		isVisible = false;
@@ -207,11 +232,16 @@ void main()
 #endif // FLAG_CULL
 
 
-
+		//isVisible = true;
 	}
 
-	uint laneID = gl_LocalInvocationID.x;
 
+
+	//if (gl_WorkGroupID.x != 0)
+	//	isVisible = false;
+
+
+	uint laneID = gl_LocalInvocationID.x;
 	uint voteVisible = ballotThreadNV(isVisible);
 	uint numTasks = bitCount(voteVisible);
 
@@ -226,9 +256,7 @@ void main()
         // set output data
         o_Patch[idxOffset].vertices = v;
         o_Patch[idxOffset].key = key;
-
        
-
 		//if(gl_LocalInvocationID.x == 1)
 		//	gl_TaskCountNV = 0;
 
@@ -247,11 +275,11 @@ void main()
 #ifdef MESH_SHADER
 #line 1
 
-const int gpuSubd = PATCH_TESS_LEVEL_LOG;
+const int gpuSubd = PATCH_SUBD_LEVEL;
 
 
 layout(local_size_x = COMPUTE_THREAD_COUNT) in;
-layout(max_vertices = MESH_VERTEX_COUNT, max_primitives = MESH_PRIMITIVE_COUNT) out;
+layout(max_vertices = INSTANCED_MESH_VERTEX_COUNT, max_primitives = INSTANCED_MESH_PRIMITIVE_COUNT) out;
 layout(triangles) out;
 
 taskNV in Patch {
@@ -261,7 +289,7 @@ taskNV in Patch {
 
 layout(location = 0) out Interpolants{
     vec2 o_TexCoord;
-} OUT[MESH_VERTEX_COUNT];  //COMPUTE_THREAD_COUNT
+} OUT[INSTANCED_MESH_VERTEX_COUNT];  //COMPUTE_THREAD_COUNT
 
 void main()
 {
@@ -389,11 +417,25 @@ void main()
 		);
 	uint key = i_Patch[id].key;
 
-	gl_PrimitiveCountNV = (3 << (gpuSubd * 2)) / 3;
+	
+	int triangleCnt;
+	int vertexCnt;
 
-	int sliceCnt = (1 << gpuSubd) + 1;     // side vertices;
-	int vertexCnt = (sliceCnt * (sliceCnt + 1)) / 2;
-	int indexCnt = 3 << (gpuSubd * 2);
+	if (PATCH_SUBD_LEVEL == 0) {
+		triangleCnt = 1;
+		vertexCnt = 3;
+	}
+	else {
+		int subdLevel = 2 * PATCH_SUBD_LEVEL - 1;
+		int stripCnt = 1 << subdLevel;
+
+		triangleCnt = stripCnt * 2;
+		vertexCnt = stripCnt * 4;	
+	}
+
+	int indexCnt = triangleCnt * 3;
+	gl_PrimitiveCountNV = triangleCnt;
+
 
 	int numLoop = (vertexCnt % COMPUTE_THREAD_COUNT) != 0 ? (vertexCnt / COMPUTE_THREAD_COUNT) + 1 : (vertexCnt / COMPUTE_THREAD_COUNT);
 	for (int l = 0; l < numLoop; ++l) {
@@ -411,10 +453,17 @@ void main()
 			finalVertex.z += dmap(finalVertex.xy);
 #endif
 #if SHADING_LOD
-			vec2 tessCoord = instancedBaryCoords;
+			//vec2 tessCoord = instancedBaryCoords;
+			int keyLod = findMSB(key);
+
+
+			vec2 tessCoord = intValToColor2(keyLod);
+			//vec2 tessCoord = intValToColor2(int(gl_WorkGroupID.x));
+			//vec2 tessCoord = intValToColor2( int(i_Patch[id].taskId) );
 #else
 			vec2 tessCoord = finalVertex.xy * 0.5 + 0.5;
 #endif
+
 			OUT[curVert].o_TexCoord = tessCoord;
 			gl_MeshVerticesNV[curVert].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1.0);
 			for (int d = 0; d < NUM_CLIPPING_PLANES; d++) {
@@ -605,7 +654,7 @@ void main()
 		vec3(1.0, 0.50, 0.00));
 	vec3 color = berp(c, i_TexCoord);
 	o_FragColor = vec4(color, 1);
-
+	//o_FragColor = vec4(i_TexCoord,0, 1);
 #elif SHADING_DIFFUSE
 	vec2 s = texture(u_SmapSampler, i_TexCoord).rg * u_DmapFactor;
 	vec3 n = normalize(vec3(-s, 1));
@@ -622,6 +671,7 @@ void main()
 #else
 	o_FragColor = vec4(1, 0, 0, 1);
 #endif
+
 }
 
 #endif

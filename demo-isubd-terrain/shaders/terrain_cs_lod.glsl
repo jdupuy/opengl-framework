@@ -32,11 +32,20 @@ readonly buffer IndexBuffer {
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
-layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
-uniform atomic_uint u_PreviousSubdBufferCounter;
+//layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
+//uniform atomic_uint u_PreviousSubdBufferCounter;
+layout(std430, binding = BUFFER_BINDING_INDIRECT_COMMAND)		//BUFFER_DISPATCH_INDIRECT
+buffer IndirectCommandBuffer {
+	uint u_IndirectCommand[8];
+};
 
-layout (binding = BUFFER_BINDING_CULLED_SUBD_COUNTER)
-uniform atomic_uint u_CulledSubdBufferCounter[2];
+//layout (binding = BUFFER_BINDING_SUBD_COUNTER, offset = 4)
+layout(binding = BUFFER_BINDING_CULLED_SUBD_COUNTER)
+uniform atomic_uint u_CulledSubdBufferCounter;
+
+//layout(binding = BUFFER_BINDING_CULLED_SUBD_COUNTER)
+//uniform atomic_uint u_CulledSubdBufferCounter[2];
+
 
 struct Transform {
     mat4 modelView;
@@ -136,7 +145,8 @@ void main()
     uint threadID = gl_GlobalInvocationID.x;
 
     // early abort if the threadID exceeds the size of the subdivision buffer
-    if (threadID >= atomicCounter(u_PreviousSubdBufferCounter))
+    //if (threadID >= atomicCounter(u_PreviousSubdBufferCounter))
+	if (threadID >= u_IndirectCommand[7])
         return;
 
     // get coarse triangle associated to the key
@@ -175,7 +185,8 @@ void main()
     if (true) {
 #endif // FLAG_CULL
         // write key
-        uint idx = atomicCounterIncrement(u_CulledSubdBufferCounter[1]);
+        //uint idx = atomicCounterIncrement(u_CulledSubdBufferCounter[1]);
+		uint idx = atomicCounterIncrement(u_CulledSubdBufferCounter);
 
         u_CulledSubdBuffer[idx] = uvec2(primID, key);
     }
