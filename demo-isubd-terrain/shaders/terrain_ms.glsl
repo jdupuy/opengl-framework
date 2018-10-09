@@ -1,8 +1,10 @@
 #line 2
 
+#define USE_OPTIMIZED_TASK_PARAMETER_BLOCK          1
 
-//#undef COMPUTE_THREAD_COUNT
-//#define COMPUTE_THREAD_COUNT 1
+#define MeshPatchAttributes() vec4 vertices[3]; uint key; 
+
+
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Sahder for Terrain Rendering
 //
@@ -41,11 +43,8 @@ readonly buffer IndexBufferInstanced {
 layout (binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
 
-//Deprecated
-//layout (binding = BUFFER_BINDING_SUBD_COUNTER_PREVIOUS)
-//uniform atomic_uint u_PreviousSubdBufferCounter;
 
-layout(std430, binding = BUFFER_BINDING_INDIRECT_COMMAND)		//BUFFER_DISPATCH_INDIRECT
+layout(std430, binding = BUFFER_BINDING_INDIRECT_COMMAND)
 buffer IndirectCommandBuffer {
 	uint u_IndirectCommand[8];
 };
@@ -96,8 +95,6 @@ float distanceToLod(float z, float lodFactor)
 }
 
 
-//#define MeshPatchAttributes() vec4 vertices[3]; uint key; 
-#define MeshPatchAttributes() vec4 vertices0; vec4 vertices1; vec2 vertices2;
 
 
 
@@ -111,7 +108,7 @@ float distanceToLod(float z, float lodFactor)
 #ifdef TASK_SHADER
 layout(local_size_x = COMPUTE_THREAD_COUNT) in;
 
-#if 0
+#if USE_OPTIMIZED_TASK_PARAMETER_BLOCK == 0
 taskNV out Patch {
 	MeshPatchAttributes()
 } o_Patch[COMPUTE_THREAD_COUNT];
@@ -178,8 +175,9 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 			writeKey(primID, parentKey(key));
 		}
 #else
+        //Experiments to fix missing triangles when merging
 		else {
-			int numMergeLevels = keyLod - (parentLod - 1);
+			int numMergeLevels = keyLod - (parentLod);
 
 			uint mergeMask = (key & ((1 << numMergeLevels) - 1));
 			if (mergeMask == 0) 
@@ -204,16 +202,13 @@ void main()
 	uint key; vec3 v[3];
 
     // early abort if the threadID exceeds the size of the subdivision buffer
-	//if (threadID >= atomicCounter(u_PreviousSubdBufferCounter)) 
-	if ( threadID >= u_IndirectCommand[7] )
-	{
+	if ( threadID >= u_IndirectCommand[7] ) {   //Num triangles is stored in the last reserved field of the draw indiretc structure
 
 		isVisible = false;
-		//return;
+
 	} else {
 
 		// get coarse triangle associated to the key
-		//CC: Why loading that from VRAM ??
 		uint primID = u_SubdBufferIn[threadID].x;
 		vec3 v_in[3] = vec3[3](
 			u_VertexBuffer[u_IndexBuffer[primID * 3]].xyz,
@@ -248,13 +243,8 @@ void main()
 #endif // FLAG_CULL
 
 
-		//isVisible = true;
+
 	}
-
-
-
-	//if (gl_WorkGroupID.x != 0)
-	//	isVisible = false;
 
 
 	uint laneID = gl_LocalInvocationID.x;
@@ -271,16 +261,9 @@ void main()
 
         // set output data
         //o_Patch[idxOffset].vertices = v;
-#if 0
+#if USE_OPTIMIZED_TASK_PARAMETER_BLOCK == 0
 		o_Patch[idxOffset].vertices = vec4[3](vec4(v[0], 1.0), vec4(v[1], 1.0), vec4(v[2], 1.0));
 		o_Patch[idxOffset].key = key;
-#elif 0
-		o_Patch[idxOffset].vertices0.xyz = v[0].xyz;
-		o_Patch[idxOffset].vertices0.w = v[1].x;
-		o_Patch[idxOffset].vertices1.xy = v[1].yz;
-		o_Patch[idxOffset].vertices1.zw = v[2].xy;
-		o_Patch[idxOffset].vertices2.x = v[2].z;
-		o_Patch[idxOffset].vertices2.y = uintBitsToFloat(key);
 #else
 		o_Patch.vertices[idxOffset * 3 + 0] = vec4(v[0].xyz, v[1].x);
 		o_Patch.vertices[idxOffset * 3 + 1] = vec4(v[1].yz, v[2].xy);
@@ -313,7 +296,7 @@ layout(local_size_x = COMPUTE_THREAD_COUNT) in;
 layout(max_vertices = INSTANCED_MESH_VERTEX_COUNT, max_primitives = INSTANCED_MESH_PRIMITIVE_COUNT) out;
 layout(triangles) out;
 
-#if 0
+#if USE_OPTIMIZED_TASK_PARAMETER_BLOCK == 0
 taskNV in Patch {
 	MeshPatchAttributes()
 } i_Patch[COMPUTE_THREAD_COUNT];
@@ -336,117 +319,9 @@ void main()
 	int id = int(gl_WorkGroupID.x);
 	uint laneID = gl_LocalInvocationID.x;
 
-#if 0  //Naive 1 thread - 1 triangle
-	if (laneID == 0) {
-		vec3 v[3] = vec3[3](
-			i_Patch[id].vertices[0].xyz,
-			i_Patch[id].vertices[1].xyz,
-			i_Patch[id].vertices[2].xyz
-			);
-		//v = vec3[3](vec3(0), vec3(1,0,0), vec3(0,1,0));
 
-		gl_PrimitiveCountNV = 1;
-
-		/*gl_MeshVerticesNV[0].gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-		gl_MeshVerticesNV[1].gl_Position = vec4(1.0, 0.0, 0.0, 1.0);
-		gl_MeshVerticesNV[2].gl_Position = vec4(0.0, 1.0, 0.0, 1.0);*/
-
-		for (int vert = 0; vert < 3; ++vert) {
-			vec2 uv = vec2(vert & 1, vert >> 1 & 1);
-			vec3 finalVertex = berp(v, uv);
-
-			//int idx = 3 * id + vert;
-			int idx = vert;
-
-			//gl_MeshVerticesNV[vert].gl_Position = vec4(uv, 0.0, 1.0);
-			gl_MeshVerticesNV[idx].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
-
-			gl_PrimitiveIndicesNV[idx] = idx;
-
-			for (int i = 0; i < NUM_CLIPPING_PLANES; i++) {
-				gl_MeshVerticesNV[idx].gl_ClipDistance[i] = 1.0;
-			}
-
-			OUT[idx].o_TexCoord = uv;
-		}
-
-	}
-#elif 0
-	//Naive multi-threads, analytic instanced geom
-
-	vec3 v[3] = vec3[3](
-		i_Patch[id].vertices[0].xyz,
-		i_Patch[id].vertices[1].xyz,
-		i_Patch[id].vertices[2].xyz
-		);
-
-	gl_PrimitiveCountNV = 0;
-
-	// set tess levels
-	int edgeCnt = PATCH_TESS_LEVEL;
-	float edgeLength = 1.0 / float(edgeCnt);
-
-	int numTriangles = 0;
-	int curVert = 0;
-
-	for (int i = 0; i < edgeCnt; ++i) 
-	{
-
-		int vertexCnt = 2 * i + 3;
-
-		// start a strip
-		//for (int j = 0; j < vertexCnt; ++j) 
-		if(laneID<vertexCnt)
-		{
-			int j = int(laneID);
-
-			int curVertOK = curVert + j;
-			int numTrianglesOK = numTriangles + j - 2;
-
-			int ui = j >> 1;
-			int vi = (edgeCnt - 1) - (i - (j & 1));
-			vec2 tessCoord = vec2(ui, vi) * edgeLength;
-			vec3 finalVertex = berp(v, tessCoord);
-
-#if FLAG_DISPLACE
-			finalVertex.z += dmap(finalVertex.xy);
-#endif
-
-			OUT[curVertOK].o_TexCoord = tessCoord;
-			gl_MeshVerticesNV[curVertOK].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1.0);
-			for (int d = 0; d < NUM_CLIPPING_PLANES; d++) {
-				gl_MeshVerticesNV[curVertOK].gl_ClipDistance[d] = 1.0;
-			}
-				
-				
-			if (j >= 2) {
-				//if (numTriangles % 2 == 0) {  //If backface  culling...
-					gl_PrimitiveIndicesNV[numTrianglesOK * 3 + 0] = curVertOK - 2;
-					gl_PrimitiveIndicesNV[numTrianglesOK * 3 + 1] = curVertOK - 1;
-					gl_PrimitiveIndicesNV[numTrianglesOK * 3 + 2] = curVertOK;
-				/*}
-				else {
-					gl_PrimitiveIndicesNV[numTriangles * 3 + 0] = curVertOK - 1;
-					gl_PrimitiveIndicesNV[numTriangles * 3 + 1] = curVertOK - 2;
-					gl_PrimitiveIndicesNV[numTriangles * 3 + 2] = curVertOK;
-				}*/
-
-				///numTriangles++;
-			}
-			///curVert++;
-			//EmitVertex();
-		}
-		curVert+= vertexCnt;
-		numTriangles += vertexCnt - 2;
-		//EndPrimitive();
-	}
-
-	//gl_PrimitiveCountNV = numTriangles;
-	gl_PrimitiveCountNV = (3 << (gpuSubd * 2)) / 3;
-
-#elif 1
 	//Multi-threads, *load* instanced geom
-#if 0
+#if USE_OPTIMIZED_TASK_PARAMETER_BLOCK == 0
 	vec3 v[3] = vec3[3](
 		i_Patch[id].vertices[0].xyz,
 		i_Patch[id].vertices[1].xyz,
@@ -454,14 +329,6 @@ void main()
 		);
 
 	uint key = i_Patch[id].key;
-#elif 0
-	vec3 v[3] = vec3[3](
-		i_Patch[id].vertices0.xyz,
-		vec3(i_Patch[id].vertices0.w, i_Patch[id].vertices1.xy),
-		vec3(i_Patch[id].vertices1.zw, i_Patch[id].vertices2.x)
-		);
-
-	uint key = floatBitsToUint(i_Patch[id].vertices2.y);
 #else
 	vec3 v[3] = vec3[3](
 		i_Patch.vertices[id * 3 + 0].xyz,
@@ -471,8 +338,6 @@ void main()
 
 	uint key = floatBitsToUint(i_Patch.vertices[id * 3 + 2].y);
 #endif
-	
-
 	
 	
 	const int vertexCnt = INSTANCED_MESH_VERTEX_COUNT;
@@ -530,148 +395,6 @@ void main()
 		}
 
 	}
-
-#elif 0
-	//Analytic optimized (dedup) instanced patch
-	//NOT FINISHED !!!
-
-	vec3 v[3] = vec3[3](
-		i_Patch[id].vertices[0].xyz,
-		i_Patch[id].vertices[1].xyz,
-		i_Patch[id].vertices[2].xyz
-		);
-
-	int edgeCnt = PATCH_TESS_LEVEL;
-	float edgeLength = 1.0 / float(edgeCnt);
-
-	//
-	int sliceCnt = (1 << gpuSubd) + 1;     // side vertices;
-	int vertexCnt = (sliceCnt * (sliceCnt + 1)) / 2;
-	int indexCnt = 3 << (gpuSubd * 2);
-
-	int numLoop = (vertexCnt % COMPUTE_THREAD_COUNT)!=0 ? (vertexCnt / COMPUTE_THREAD_COUNT) + 1 : (vertexCnt / COMPUTE_THREAD_COUNT);
-
-	for (int l = 0; l < numLoop; ++l) {
-		int curVert = int(laneID) + l* COMPUTE_THREAD_COUNT;
-
-		if (curVert < vertexCnt) {
-			//int prevVertexCnt = (sliceCnt * (sliceCnt + 1)) / 2;
-
-			//endVert = sum(i, 1, sliceCnt) = sliceCnt * (sliceCnt + 1) / 2 + sliceCnt;
-
-			int sliceCntPrev = (int(sqrt(8 * curVert + 9)) - 3) / 2;
-
-			//int sliceCnt = (prevVertexCnt*2)
-			int i = sliceCntPrev;
-			//int j = curVert % sliceCntPrev;
-			int j = curVert - (i * (i + 1) / 2);
-
-			//for (int i = 0; i < sliceCnt; ++i)
-			//for (int j = 0; j < i + 1; ++j)
-
-			
-
-
-			int idx = i * (i + 1) / 2 + j;
-			//(curVert - j) * 2 = i * (i + 1) ;
-			//int j = curVert - i * (i + 1) / 2;
-
-			float ui = float(j) / (sliceCnt - 1);
-			float vi = 1.f - float(i) / (sliceCnt - 1);
-
-			//vertices[idx] = dja::vec2(u, v);
-			vec2 tessCoord = vec2(ui, vi) * edgeLength;
-			vec3 finalVertex = berp(v, tessCoord);
-
-#if FLAG_DISPLACE
-			finalVertex.z += dmap(finalVertex.xy);
-#endif
-			int curVertOK = idx; // curVert;
-
-			OUT[curVertOK].o_TexCoord = tessCoord;
-			gl_MeshVerticesNV[curVertOK].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1.0);
-			for (int d = 0; d < NUM_CLIPPING_PLANES; d++) {
-				gl_MeshVerticesNV[curVertOK].gl_ClipDistance[d] = 1.0;
-			}
-
-		}
-	}
-
-
-	int indexCntOK =  indexCnt / 6;
-
-	int numLoopIdx = (indexCntOK % COMPUTE_THREAD_COUNT) != 0 ? (indexCntOK / COMPUTE_THREAD_COUNT) + 1 : (indexCntOK / COMPUTE_THREAD_COUNT);
-
-	for (int l = 0; l < numLoopIdx; ++l) {
-		int curSlot = int(laneID) + l * COMPUTE_THREAD_COUNT;
-
-		if (curSlot < indexCntOK) {
-			
-			//endIdx = sum(i, 0, sliceCnt - 1) = sliceCnt * (sliceCnt + 1) / 2;
-			//curIdx = sliceCntPrev * (sliceCntPrev + 1) / 2;
-
-			int i = (int(sqrt(4 * curSlot + 1)) - 1);
-			int j = curSlot - (i * (i + 1) / 2) ;
-
-			int curIdxOK = (3 * i * i) + j * 6;
-
-			gl_PrimitiveIndicesNV[curIdxOK + 0] = (i + 1) * (i + 2) / 2 + j;
-			gl_PrimitiveIndicesNV[curIdxOK + 1] = (i + 1) * (i + 2) / 2 + j + 1;
-			gl_PrimitiveIndicesNV[curIdxOK + 2] = i * (i + 1) / 2 + j;
-			gl_PrimitiveIndicesNV[curIdxOK + 3] = gl_PrimitiveIndicesNV[curIdxOK + 2];
-			gl_PrimitiveIndicesNV[curIdxOK + 4] = gl_PrimitiveIndicesNV[curIdxOK + 1];
-			gl_PrimitiveIndicesNV[curIdxOK + 5] = gl_PrimitiveIndicesNV[curIdxOK + 2] + 1;
-
-
-		}
-
-		if (curSlot < sliceCnt - 1) {
-			int i = curSlot;
-
-			int curIdxOK = (3 * i * i) + i * 6;
-			gl_PrimitiveIndicesNV[curIdxOK + 0] = (i + 1) * (i + 2) / 2 + i;
-			gl_PrimitiveIndicesNV[curIdxOK + 1] = (i + 2) * (i + 3) / 2 - 1;
-			gl_PrimitiveIndicesNV[curIdxOK + 2] = (i + 1) * (i + 2) / 2 - 1;
-
-		}
-	}
-
-
-#else
-	
-
-	
-	if (laneID < 3) {
-		gl_PrimitiveCountNV = 1;
-
-		vec3 v = i_Patch[id].vertices[laneID].xyz;
-
-
-		/*gl_MeshVerticesNV[0].gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-		gl_MeshVerticesNV[1].gl_Position = vec4(1.0, 0.0, 0.0, 1.0);
-		gl_MeshVerticesNV[2].gl_Position = vec4(0.0, 1.0, 0.0, 1.0);*/
-		int vert = int(laneID);
-
-
-		vec2 uv = vec2(vert & 1, vert >> 1 & 1);
-		//vec3 finalVertex = berp(v, uv);
-		vec3 finalVertex = v;
-
-		int idx = vert;
-
-		//gl_MeshVerticesNV[vert].gl_Position = vec4(uv, 0.0, 1.0);
-		gl_MeshVerticesNV[idx].gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1);
-
-		gl_PrimitiveIndicesNV[idx] = idx;
-
-		for (int i = 0; i < NUM_CLIPPING_PLANES; i++) {
-			gl_MeshVerticesNV[idx].gl_ClipDistance[i] = 1.0;
-		}
-
-		OUT[idx].o_TexCoord = uv;
-
-	}
-#endif
 
 }
 #endif
