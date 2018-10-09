@@ -1,8 +1,13 @@
 # Implicit Subdivision on the GPU
 
+![alt text](preview.png "Preview")
+
 This demo provides additional implementations for the article 
-"Adaptive GPU Tessellation with Compute Shaders" by Jad Khoury, Jonathan Dupuy (myself) and 
-Christophe Riccio; the paper is available on my website: <http://onrendering.com>.
+"Adaptive GPU Tessellation with Compute Shaders" by 
+[Jad Khoury](https://github.com/jadkhoury), 
+[Jonathan Dupuy](http://onrendering.com/) (myself) and 
+[Christophe Riccio](https://github.com/g-truc); 
+the paper is available on my website: <http://onrendering.com>.
 
 Specifically, the demo provides up to 4 rendering techniques:
 
@@ -15,7 +20,8 @@ tessellation factors
 tessellation factors
 
 * *Mesh Shader* -- Single-pass rendering with a task and mesh shader (Turing GPUs only); the mesh shader produces a grid 
-with *fixed* tessellation factors
+with *fixed* tessellation factors. Many thanks to [Cyril Crassin](https://twitter.com/Icare3D) for 
+helping me putting this one up. 
 
 The demo loads a 16-bit displacement map and allows the user to play with the subdivision parameters.
 This source code is released in order to facilitate adoption by developpers.
