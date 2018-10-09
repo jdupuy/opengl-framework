@@ -9,7 +9,7 @@ This demo provides additional implementations for the article
 [Christophe Riccio](https://github.com/g-truc); 
 the paper is available on my website: <http://onrendering.com>.
 
-Many thanks to [Cyril Crassin](https://twitter.com/Icare3D) for 
+Many thanks to [Cyril Crassin](https://twitter.com/Icare3D) (from NVIDIA) for 
 helping me putting this demo up (the mesh shader pipeline exists thanks to 
 his help). 
 
