@@ -67,7 +67,7 @@ struct FramebufferManager {
 
 // -----------------------------------------------------------------------------
 // Camera Manager
-#define INIT_POS dja::vec3(1.5f, 0.0f, 0.4f)
+#define INIT_POS dja::vec3(0.5f, 0.0f, 0.5f)
 struct CameraManager {
     float fovy, zNear, zFar; // perspective settings
     dja::vec3 pos;           // 3D position
@@ -76,7 +76,7 @@ struct CameraManager {
     55.f, 0.0001f, 32.f,
     INIT_POS,
     dja::mat3::lookat(
-        dja::vec3(0.f, 0.f, 0.f),
+        dja::vec3(0.f, 0.f, 0.2f),
         INIT_POS,
         dja::vec3(0, 0, 1)
     )
