@@ -508,6 +508,8 @@ bool loadTerrainProgram()
 
     setupSubdKernel(djp);
 
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_common.glsl"));
+
     if (g_terrain.method == METHOD_TS) {
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
     }
@@ -556,6 +558,8 @@ bool loadSubdCsLodProgram()
 
         setupSubdKernel(djp);
         
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_common.glsl"));
+
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
 
         if (!djgp_to_gl(djp, 450, false, true, program)) {

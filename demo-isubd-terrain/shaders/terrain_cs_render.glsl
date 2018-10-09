@@ -1,4 +1,8 @@
-#line 1
+#line 2
+//The rest of the code is inside those headers which are included by the C-code:
+//Include isubd.glsl
+//Include terrain_common.glsl
+
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Sahder for Terrain Rendering
 //
@@ -18,28 +22,6 @@ readonly buffer IndexBuffer {
     uint u_IndexBuffer[];
 };
 
-struct Transform {
-    mat4 modelView;
-    mat4 projection;
-    mat4 modelViewProjection;
-    mat4 viewInv;
-};
-
-layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
-uniform Transforms {
-    Transform u_Transform;
-};
-
-uniform sampler2D u_DmapSampler;
-uniform sampler2D u_SmapSampler; // slope map
-uniform float u_DmapFactor;
-uniform float u_LodFactor;
-
-// displacement map
-float dmap(vec2 pos)
-{
-    return (texture(u_DmapSampler, pos * 0.5 + 0.5).x) * u_DmapFactor;
-}
 
 // -----------------------------------------------------------------------------
 /**

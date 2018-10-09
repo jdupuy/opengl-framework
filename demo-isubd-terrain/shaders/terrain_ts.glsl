@@ -1,4 +1,8 @@
-#line 1
+#line 2
+//The rest of the code is inside those headers which are included by the C-code:
+//Include isubd.glsl
+//Include terrain_common.glsl
+
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Sahder for Terrain Rendering
 //
@@ -8,10 +12,6 @@ readonly buffer SubdBufferIn {
     uvec2 u_SubdBufferIn[];
 };
 
-layout (std430, binding = BUFFER_BINDING_SUBD2)
-buffer SubdBufferOut {
-    uvec2 u_SubdBufferOut[];
-};
 
 layout (std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
 readonly buffer VertexBuffer {
@@ -23,38 +23,6 @@ readonly buffer IndexBuffer {
     uint u_IndexBuffer[];
 };
 
-layout (binding = BUFFER_BINDING_SUBD_COUNTER)
-uniform atomic_uint u_SubdBufferCounter;
-
-struct Transform {
-    mat4 modelView;
-    mat4 projection;
-    mat4 modelViewProjection;
-    mat4 viewInv;
-};
-
-layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
-uniform Transforms {
-    Transform u_Transform;
-};
-
-uniform sampler2D u_DmapSampler; // displacement map
-uniform sampler2D u_SmapSampler; // slope map
-uniform float u_DmapFactor;
-uniform float u_LodFactor;
-
-// displacement map
-float dmap(vec2 pos)
-{
-    return (texture(u_DmapSampler, pos * 0.5 + 0.5).x) * u_DmapFactor;
-}
-
-float distanceToLod(float z, float lodFactor)
-{
-    // Note that we multiply the result by two because the triangle's
-    // edge lengths decreases by half every two subdivision steps.
-    return -2.0 * log2(clamp(z * lodFactor, 0.0f, 1.0f));
-}
 
 // -----------------------------------------------------------------------------
 /**
@@ -81,52 +49,7 @@ out Patch {
     flat uint key;
 } o_Patch[];
 
-float computeLod(vec3 c)
-{
-#if FLAG_DISPLACE
-    c.z+= dmap(u_Transform.viewInv[3].xy);
-#endif
 
-    vec3 cxf = (u_Transform.modelView * vec4(c, 1)).xyz;
-    float z = length(cxf);
-
-    return distanceToLod(z, u_LodFactor);
-}
-
-float computeLod(in vec4 v[3])
-{
-    vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
-    return computeLod(c);
-}
-
-void writeKey(uint primID, uint key)
-{
-    uint idx = atomicCounterIncrement(u_SubdBufferCounter);
-
-    u_SubdBufferOut[idx] = uvec2(primID, key);
-}
-
-void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
-{
-    // extract subdivision level associated to the key
-    int keyLod = findMSB(key);
-
-    // update the key accordingly
-    if (/* subdivide ? */ keyLod < targetLod && !isLeafKey(key)) {
-        uint children[2]; childrenKeys(key, children);
-
-        writeKey(primID, children[0]);
-        writeKey(primID, children[1]);
-    } else if (/* keep ? */ keyLod < (parentLod + 1)) {
-        writeKey(primID, key);
-    } else /* merge ? */ {
-        if (/* is root ? */isRootKey(key)) {
-            writeKey(primID, key);
-        } else if (/* is zero child ? */isChildZeroKey(key)) {
-            writeKey(primID, parentKey(key));
-        }
-    }
-}
 
 void main()
 {
