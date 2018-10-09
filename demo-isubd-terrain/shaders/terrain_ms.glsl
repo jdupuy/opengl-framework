@@ -128,7 +128,7 @@ void main()
 #endif // FLAG_CULL
 
 
-        updateSubdBuffer(primID, key, targetLod, parentLod, isVisible);
+        updateSubdBuffer(primID, key, targetLod, parentLod);
     }
 
 
