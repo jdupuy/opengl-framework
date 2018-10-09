@@ -700,9 +700,14 @@ bool loadSceneFramebufferTexture()
     case AA_MSAA8:
     case AA_MSAA16: {
         int samples = 1 << g_framebuffer.aa;
+        
         int maxSamples;
+        int maxSamplesDepth;
+        //glGetIntegerv(GL_MAX_INTEGER_SAMPLES, &maxSamples); //Wrong enum !
+        glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &maxSamples);
+        glGetIntegerv(GL_MAX_DEPTH_TEXTURE_SAMPLES, &maxSamplesDepth);
+        maxSamples = maxSamplesDepth < maxSamples ? maxSamplesDepth : maxSamples;
 
-        glGetIntegerv(GL_MAX_INTEGER_SAMPLES, &maxSamples);
         if (samples > maxSamples) {
             LOG("note: MSAA is %ix\n", maxSamples);
             samples = maxSamples;
