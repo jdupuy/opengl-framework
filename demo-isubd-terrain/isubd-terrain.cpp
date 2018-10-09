@@ -390,7 +390,7 @@ bool loadViewerProgram()
     if (g_framebuffer.aa >= AA_MSAA2 && g_framebuffer.aa <= AA_MSAA16)
         djgp_push_string(djp, "#define MSAA_FACTOR %i\n", 1 << g_framebuffer.aa);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "viewer.glsl"));
-    LOG("loading: %s\n", strcat2(buf, g_app.dir.shader, "viewer.glsl"));
+
     if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
@@ -586,6 +586,7 @@ bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool 
     char buf[1024];
 
     LOG("Loading {Update-Indirect-Program}\n");
+    djgp_push_string(djp, "#extension GL_ARB_shader_atomic_counter_ops : require\n");
 
     djgp_push_string(djp, "#define UPDATE_INDIRECT_STRUCT %i\n", updateIndirectStruct ? 1 : 0);
     djgp_push_string(djp, "#define UPDATE_INDIRECT_RESET_COUNTER1 %i\n", resetCounter1 ? 1 : 0);
@@ -601,7 +602,7 @@ bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool 
 
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_updateIndirect_cs.glsl"));
 
-    if (!djgp_to_gl(djp, 460, false, true, program)) {
+    if (!djgp_to_gl(djp, 450, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
 
@@ -617,16 +618,16 @@ bool loadUpdateIndirectPrograms()
 {
 
     if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
-        loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 0, 1, 0);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 0, 1, 0);
     }
 
     if (g_terrain.method == METHOD_MS) {
-        loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
     }
 
     if (g_terrain.method == METHOD_CS) {
-        loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, true, 0, 1 << g_terrain.computeThreadCount, 1);
-        loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 1, 1, 0);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, true, 0, 1 << g_terrain.computeThreadCount, 1);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 1, 1, 0);
 
     }
 
