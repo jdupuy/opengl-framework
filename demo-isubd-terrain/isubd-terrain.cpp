@@ -436,43 +436,31 @@ void setShaderMacros(djg_program *djp)
         break;
     }
 
-    djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n", 1 << g_terrain.gpuSubd);
-    djgp_push_string(djp, "#define PATCH_SUBD_LEVEL %i\n", g_terrain.gpuSubd);
-
-    djgp_push_string(djp, "#define INSTANCED_MESH_VERTEX_COUNT %i\n", instancedMeshVertexCount);
-    djgp_push_string(djp, "#define INSTANCED_MESH_PRIMITIVE_COUNT %i\n", instancedMeshPrimitiveCount);
-
+    // constants
     if (g_terrain.method == METHOD_GS) {
         int subdLevel = g_terrain.gpuSubd;
         int vertexCnt = subdLevel == 0 ? 3 : 4 << (2 * subdLevel - 1);
 
         djgp_push_string(djp, "#define MAX_VERTICES %i\n", vertexCnt);
     }
-
-    
+    djgp_push_string(djp, "#define PATCH_TESS_LEVEL %i\n",1 << g_terrain.gpuSubd);
+    djgp_push_string(djp, "#define PATCH_SUBD_LEVEL %i\n", g_terrain.gpuSubd);
+    djgp_push_string(djp, "#define INSTANCED_MESH_VERTEX_COUNT %i\n", instancedMeshVertexCount);
+    djgp_push_string(djp, "#define INSTANCED_MESH_PRIMITIVE_COUNT %i\n", instancedMeshPrimitiveCount);
     djgp_push_string(djp, "#define COMPUTE_THREAD_COUNT %i\n", 1u << g_terrain.computeThreadCount); //Compute Shader + Mesh Shader + Batch Program
 
-    //Bindings//
+    // bindings
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
-    
-    djgp_push_string(djp, "#define BUFFER_BINDING_GEOMETRY_VERTICES %i\n",
-        BUFFER_GEOMETRY_VERTICES);
-    djgp_push_string(djp, "#define BUFFER_BINDING_GEOMETRY_INDEXES %i\n",
-        BUFFER_GEOMETRY_INDEXES);
-    djgp_push_string(djp, "#define BUFFER_BINDING_INSTANCED_GEOMETRY_VERTICES %i\n",
-        BUFFER_INSTANCED_GEOMETRY_VERTICES);
-    djgp_push_string(djp, "#define BUFFER_BINDING_INSTANCED_GEOMETRY_INDEXES %i\n",
-        BUFFER_INSTANCED_GEOMETRY_INDEXES);
-
+    djgp_push_string(djp, "#define BUFFER_BINDING_GEOMETRY_VERTICES %i\n", BUFFER_GEOMETRY_VERTICES);
+    djgp_push_string(djp, "#define BUFFER_BINDING_GEOMETRY_INDEXES %i\n", BUFFER_GEOMETRY_INDEXES);
+    djgp_push_string(djp, "#define BUFFER_BINDING_INSTANCED_GEOMETRY_VERTICES %i\n", BUFFER_INSTANCED_GEOMETRY_VERTICES);
+    djgp_push_string(djp, "#define BUFFER_BINDING_INSTANCED_GEOMETRY_INDEXES %i\n", BUFFER_INSTANCED_GEOMETRY_INDEXES);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
-
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER2);
-
     djgp_push_string(djp, "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n", BUFFER_DISPATCH_INDIRECT);
-
 }
 
 // -----------------------------------------------------------------------------
@@ -482,14 +470,6 @@ void setShaderMacros(djg_program *djp)
  * This program renders an adaptive terrain using the implicit subdivision
  * technique discribed in GPU Zen 2.
  */
-void setupSubdKernel(djg_program *djp)
-{
-    char buf[1024];
-
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
-}
-
 bool loadTerrainProgram()
 {
     djg_program *djp = djgp_create();
@@ -506,19 +486,22 @@ bool loadTerrainProgram()
 
     setShaderMacros(djp);
 
-    setupSubdKernel(djp);
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
 
-    if (g_terrain.method == METHOD_TS) {
+    switch (g_terrain.method) {
+    case METHOD_TS:
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ts.glsl"));
-    }
-    else if (g_terrain.method == METHOD_GS) {
+        break;
+    case METHOD_GS:
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_gs.glsl"));
-    }
-    else if (g_terrain.method == METHOD_CS) {
+        break;
+    case METHOD_CS:
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_render.glsl"));
-    }
-    else if (g_terrain.method == METHOD_MS) {
+        break;
+    case METHOD_MS:
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ms.glsl"));
+        break;
     }
 
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -560,11 +543,9 @@ bool loadSubdCsLodProgram()
         char buf[1024];
 
         LOG("Loading {Compute-LoD-Program}\n");
-
         setShaderMacros(djp);
-
-        setupSubdKernel(djp);
-        
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
 
         if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -597,8 +578,16 @@ bool loadSubdCsLodProgram()
  * counters that keep track of the size of the subdivision buffer, and
  * prepare the arguments of an indirect command.
  */
-bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool resetCounter1, bool resetCounter2, int updateOffset, int divideValue, int addValue)
-{
+bool
+loadUpdateIndirectProgram(
+    int programName,
+    bool updateIndirectStruct,
+    bool resetCounter1,
+    bool resetCounter2,
+    int updateOffset,
+    int divideValue,
+    int addValue
+) {
     djg_program *djp = djgp_create();
     GLuint *program = &g_gl.programs[programName];
     char buf[1024];
@@ -635,20 +624,16 @@ bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool 
 bool loadUpdateIndirectPrograms()
 {
 
-    if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
+    switch (g_terrain.method) {
+    case METHOD_TS:
+    case METHOD_GS:
         return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 0, 1, 0);
-    }
-
-    if (g_terrain.method == METHOD_MS) {
-        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
-    }
-
-    if (g_terrain.method == METHOD_CS) {
+    case METHOD_CS:
         return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, true, 0, 1 << g_terrain.computeThreadCount, 1)
         && loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 1, 1, 0);
-
+    case METHOD_MS:
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
     }
-
 
     return (glGetError() == GL_NO_ERROR);
 }
