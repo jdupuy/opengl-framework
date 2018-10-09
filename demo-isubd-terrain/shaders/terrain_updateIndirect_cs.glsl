@@ -24,7 +24,7 @@ void main()
 
     u_IndirectCommand[UPDATE_INDIRECT_OFFSET] = cnt;
 
-    //Hack
+    //Hack: Store counter value in the last reserved field of the draw/dispatch indirect structure
     u_IndirectCommand[7] = atomicCounter(u_Counter);
 #endif
 

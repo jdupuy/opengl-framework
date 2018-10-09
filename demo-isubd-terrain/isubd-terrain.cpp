@@ -180,7 +180,6 @@ enum {
 enum {
     PROGRAM_VIEWER,
     PROGRAM_SUBD_CS_LOD,    // compute-based pipeline only
-    PROGRAM_SUBD_BATCH,     // compute-based shader pipeline only
     PROGRAM_TERRAIN,
     PROGRAM_UPDATE_INDIRECT,	//Update indirect structures
     PROGRAM_UPDATE_INDIRECT_DRAW,
@@ -612,43 +611,9 @@ bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool 
 }
 
 
-bool loadSubdBatchProgram()
-{
-    if (g_terrain.method == METHOD_MS || g_terrain.method == METHOD_CS) {
-        djg_program *djp = djgp_create();
-        GLuint *program = &g_gl.programs[PROGRAM_SUBD_BATCH];
-        char buf[1024];
-
-        LOG("Loading {Compute-Batch-Program}\n");
-
-        setShaderMacros(djp);
-
-        if (g_terrain.method == METHOD_CS) {
-            djgp_push_string(djp, "#define FLAG_COMPUTE_PATH 1\n");
-        }
-        else if (g_terrain.method == METHOD_MS) {
-            djgp_push_string(djp, "#define FLAG_MESH_PATH 1\n");
-            
-        }
-
-        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_batch.glsl"));
-
-        if (!djgp_to_gl(djp, 450, false, true, program)) {
-            LOG("=> Failure <=\n");
-            djgp_release(djp);
-
-            return false;
-        }
-        djgp_release(djp);
-    }
-
-    return (glGetError() == GL_NO_ERROR);
-}
-
-
 bool loadUpdateIndirectPrograms()
 {
-    //CC
+
     if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
         loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 0, 1, 0);
     }
@@ -678,7 +643,6 @@ bool loadPrograms()
     if (v) v &= loadViewerProgram();
     if (v) v &= loadTerrainProgram();
     if (v) v &= loadSubdCsLodProgram();
-    if (v) v &= loadSubdBatchProgram();
     if (v) v &= loadUpdateIndirectPrograms();
 
     return v;
