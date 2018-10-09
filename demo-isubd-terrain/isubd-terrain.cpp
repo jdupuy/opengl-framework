@@ -45,7 +45,7 @@
 #endif
 
 //Forces use of ad-hoc instanced geometry definition, with better vertex reuse
-#define USE_ADHOC_INSTANCED_GEOM		1
+#define USE_ADHOC_INSTANCED_GEOM        1
 
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
@@ -103,7 +103,7 @@ struct TerrainManager {
     {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.45f},
     METHOD_GS, 5,
     SHADING_DIFFUSE,
-    3,	//
+    3,    //
     0,
     5.f
 };
@@ -168,7 +168,7 @@ enum {
     BUFFER_INSTANCED_GEOMETRY_INDEXES,          // compute-based pipeline only
     BUFFER_DISPATCH_INDIRECT,                   // compute-based pipeline only
     BUFFER_DRAW_INDIRECT,
-    BUFFER_ATOMIC_COUNTER,						// New Atomic counter buffer
+    BUFFER_ATOMIC_COUNTER,                      // New Atomic counter buffer
     BUFFER_ATOMIC_COUNTER2,                     // Just for the binding index
     BUFFER_COUNT
 };
@@ -181,7 +181,7 @@ enum {
     PROGRAM_VIEWER,
     PROGRAM_SUBD_CS_LOD,    // compute-based pipeline only
     PROGRAM_TERRAIN,
-    PROGRAM_UPDATE_INDIRECT,	//Update indirect structures
+    PROGRAM_UPDATE_INDIRECT,    //Update indirect structures
     PROGRAM_UPDATE_INDIRECT_DRAW,
     PROGRAM_COUNT
 };
@@ -1216,9 +1216,9 @@ bool createAtomicCounters(GLint atomicData[8]) {
 
     glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
     glBufferData(GL_ATOMIC_COUNTER_BUFFER,
-        sizeof(GLint) * 8,		//8 slots
+        sizeof(GLint) * 8,        //8 slots
         atomicData,
-        GL_STREAM_DRAW);	//GL_STATIC_DRAW
+        GL_STREAM_DRAW);    //GL_STATIC_DRAW
 
 
     return (glGetError() == GL_NO_ERROR);
@@ -1625,7 +1625,7 @@ void renderSceneMs() {
         // create indirect dispatch buffer
         IndirectCommand cmd = {
             2u / (1u << g_terrain.computeThreadCount) + 1u,
-            0u, 0u, 0u, 0u, 0u, 0u, 2u		//Hack:last value is number of primitives
+            0u, 0u, 0u, 0u, 0u, 0u, 2u        //Hack:last value is number of primitives
         };
         createIndirectCommandBuffer(GL_DRAW_INDIRECT_BUFFER, BUFFER_DISPATCH_INDIRECT, cmd);
 
@@ -2264,7 +2264,7 @@ const dja::vec2 verticesL2[] = {
     { 0.5f, 0.25f },
     { 0.75f, 0.25f },
     { 0.75f, 0.0f },
-    { 1.0f, 0.0f }		//14
+    { 1.0f, 0.0f }        //14
 };
 const uint16_t indexesL2[] = {
     0u, 1u, 2u,
@@ -2304,44 +2304,44 @@ const dja::vec2 verticesL3[] = {
     { 0.5f*0.5f, 0.25f*0.5f + 0.5f },
     { 0.75f*0.5f, 0.25f*0.5f + 0.5f },
     { 0.75f*0.5f, 0.0f*0.5f + 0.5f },
-    { 1.0f*0.5f, 0.0f*0.5f + 0.5f },		//14
+    { 1.0f*0.5f, 0.0f*0.5f + 0.5f },        //14
 
     { 0.375f, 0.375f },
     { 0.25f, 0.375f },
     { 0.25f, 0.25f },
     { 0.375f, 0.25f },
     { 0.5f, 0.25f },
-    { 0.5f, 0.375f },	//20
+    { 0.5f, 0.375f },    //20
 
     { 0.125f, 0.375f },
     { 0.0f, 0.375f },
     { 0.0f, 0.25f },
-    { 0.125f, 0.25f },	//24
+    { 0.125f, 0.25f },    //24
 
     { 0.125f, 0.125f },
     { 0.0f, 0.125f },
     { 0.0f, 0.0f },
     { 0.125f, 0.0f },
     { 0.25f, 0.0f },
-    { 0.25f, 0.125f },	//30
+    { 0.25f, 0.125f },    //30
 
     { 0.375f, 0.125f },
     { 0.375f, 0.0f },
     { 0.5f, 0.0f },
-    { 0.5f, 0.125f },	//34
+    { 0.5f, 0.125f },    //34
 
     { 0.625f, 0.375f },
     { 0.625f, 0.25f },
-    { 0.75f, 0.25f },	//37
+    { 0.75f, 0.25f },    //37
 
     { 0.625f, 0.125f },
     { 0.625f, 0.0f },
     { 0.75f, 0.0f },
-    { 0.75f, 0.125f },	//41
+    { 0.75f, 0.125f },    //41
 
     { 0.875f, 0.125f },
     { 0.875f, 0.0f },
-    { 1.0f, 0.0f }	//44
+    { 1.0f, 0.0f }    //44
 };
 const uint16_t indexesL3[] = {
     0u, 1u, 2u,
@@ -2362,7 +2362,7 @@ const uint16_t indexesL3[] = {
     12u, 5u, 11u,
     12u, 11u, 10u,
     12u, 10u, 13u,
-    12u, 13u, 14u,		//End fo fist big triangle
+    12u, 13u, 14u,        //End fo fist big triangle
 
     15u, 14u, 13u,
     15u, 13u, 10u,
