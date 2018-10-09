@@ -1681,7 +1681,8 @@ void renderSceneMs() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
                      BUFFER_DISPATCH_INDIRECT,
                      g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER,
+                 g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
 
     // draw terrain
     glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
@@ -1724,8 +1725,12 @@ void renderSceneCs() {
 
         loadSubdivisionBuffers();
         createAtomicCounters(atomicData);
-        createIndirectCommandBuffer(GL_DISPATCH_INDIRECT_BUFFER, BUFFER_DISPATCH_INDIRECT, cmd);
-        createIndirectCommandBuffer(GL_DRAW_INDIRECT_BUFFER, BUFFER_DRAW_INDIRECT, drawElements);
+        createIndirectCommandBuffer(GL_DISPATCH_INDIRECT_BUFFER,
+                                    BUFFER_DISPATCH_INDIRECT,
+                                    cmd);
+        createIndirectCommandBuffer(GL_DRAW_INDIRECT_BUFFER,
+                                    BUFFER_DRAW_INDIRECT,
+                                    drawElements);
 
         g_terrain.pingPong = 1;
         offset = 0;
