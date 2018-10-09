@@ -488,6 +488,7 @@ bool loadTerrainProgram()
 
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
+    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_common.glsl"));
 
     switch (g_terrain.method) {
     case METHOD_TS:
