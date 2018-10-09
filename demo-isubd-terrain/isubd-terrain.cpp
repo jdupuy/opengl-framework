@@ -101,7 +101,7 @@ struct TerrainManager {
 } g_terrain = {
     {true, true, false, false, true, false},
     {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.45f},
-    METHOD_GS, 5,
+    METHOD_CS, 5,
     SHADING_DIFFUSE,
     3,    //
     0,
