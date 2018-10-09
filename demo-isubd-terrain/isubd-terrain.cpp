@@ -608,6 +608,8 @@ bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool 
         return false;
     }
     djgp_release(djp);
+
+    return (glGetError() == GL_NO_ERROR);
 }
 
 
