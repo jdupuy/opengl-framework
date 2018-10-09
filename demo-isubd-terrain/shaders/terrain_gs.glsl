@@ -155,29 +155,7 @@ layout(location = 0) out vec4 o_FragColor;
 
 void main()
 {
-#if SHADING_LOD
-    vec3 c[3] = vec3[3](vec3(0.0,0.25,0.25),
-                        vec3(0.86,0.00,0.00),
-                        vec3(1.0,0.50,0.00));
-    vec3 color = berp(c, i_TexCoord);
-    o_FragColor = vec4(color, 1);
-
-#elif SHADING_DIFFUSE
-    vec2 s = texture(u_SmapSampler, i_TexCoord).rg * u_DmapFactor;
-    vec3 n = normalize(vec3(-s, 1));
-    float d = clamp(n.z, 0.0, 1.0);
-
-    o_FragColor = vec4(vec3(d / 3.14159), 1);
-
-#elif SHADING_NORMALS
-    vec2 s = texture(u_SmapSampler, i_TexCoord).rg * u_DmapFactor;
-    vec3 n = normalize(vec3(-s, 1));
-
-    o_FragColor = vec4(abs(n), 1);
-
-#else
-    o_FragColor = vec4(1, 0, 0, 1);
-#endif
+    o_FragColor = shadeFragment(i_TexCoord);
 }
 
 #endif

@@ -40,11 +40,7 @@ vec2 intValToColor2(int keyLod) {
 // displacement map
 float dmap(vec2 pos)
 {
-#if 0
-    return cos(20.0 * pos.x) * cos(20.0 * pos.y) / 2.0 * u_DmapFactor;
-#else
     return (texture(u_DmapSampler, pos * 0.5 + 0.5).x) * u_DmapFactor;
-#endif
 }
 
 float distanceToLod(float z, float lodFactor)
@@ -136,5 +132,28 @@ void updateSubdBuffer(
 void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 {
     updateSubdBuffer(primID, key, targetLod, parentLod, true);
+}
+
+vec4 shadeFragment(vec2 texCoord)
+{
+#if SHADING_LOD
+    return vec4(texCoord, 0, 1);
+
+#elif SHADING_DIFFUSE
+    vec2 s = texture(u_SmapSampler, texCoord).rg * u_DmapFactor;
+    vec3 n = normalize(vec3(-s, 1));
+    float d = clamp(n.z, 0.0, 1.0);
+
+    return vec4(vec3(d / 3.14159), 1);
+
+#elif SHADING_NORMALS
+    vec2 s = texture(u_SmapSampler, texCoord).rg * u_DmapFactor;
+    vec3 n = normalize(vec3(-s, 1));
+
+    return vec4(abs(n), 1);
+
+#else
+    return vec4(1, 0, 0, 1);
+#endif
 }
 
