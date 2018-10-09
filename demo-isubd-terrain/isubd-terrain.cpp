@@ -543,6 +543,15 @@ bool loadTerrainProgram()
     return (glGetError() == GL_NO_ERROR);
 }
 
+// -----------------------------------------------------------------------------
+/**
+ * Load Computer-Shader LoD Program
+ *
+ * This program is responsible for updating the subdivision buffer.
+ * It also prepares a buffer (the culled subd buffer) that only
+ * contains visible triangles, which is sent for rendering.
+ * For more details, see our GPU Zen 2 chapter.
+ */
 bool loadSubdCsLodProgram()
 {
     if (g_terrain.method == METHOD_CS) {
@@ -579,6 +588,15 @@ bool loadSubdCsLodProgram()
     return (glGetError() == GL_NO_ERROR);
 }
 
+// -----------------------------------------------------------------------------
+/**
+ * Load the Indirect Program
+ *
+ * This program is responsible for preparing indirect batches. Every time
+ * the subd buffer is updated, we execute this program to reset the atomic
+ * counters that keep track of the size of the subdivision buffer, and
+ * prepare the arguments of an indirect command.
+ */
 bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool resetCounter1, bool resetCounter2, int updateOffset, int divideValue, int addValue)
 {
     djg_program *djp = djgp_create();
@@ -634,6 +652,8 @@ bool loadUpdateIndirectPrograms()
 
     return (glGetError() == GL_NO_ERROR);
 }
+
+
 // -----------------------------------------------------------------------------
 /**
  * Load All Programs
