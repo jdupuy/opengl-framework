@@ -19,8 +19,6 @@ readonly buffer SubdBufferIn {
     uvec2 u_SubdBufferIn[];
 };
 
-
-
 layout(std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
 readonly buffer VertexBuffer {
     vec4 u_VertexBuffer[];
@@ -41,15 +39,10 @@ readonly buffer IndexBufferInstanced {
     uint16_t u_IndexBufferInstanced[];
 };
 
-
-
-
-
 layout(std430, binding = BUFFER_BINDING_INDIRECT_COMMAND)
 buffer IndirectCommandBuffer {
     uint u_IndirectCommand[8];
 };
-
 
 
 // -----------------------------------------------------------------------------
@@ -71,8 +64,6 @@ taskNV out Patch{
     vec4 vertices[3 * COMPUTE_THREAD_COUNT];
 } o_Patch;
 #endif
-
-
 
 
 
@@ -145,7 +136,6 @@ void main()
         uint idxOffset = bitCount(voteVisible & gl_ThreadLtMaskNV);
 
         // set output data
-        //o_Patch[idxOffset].vertices = v;
 #if USE_OPTIMIZED_TASK_PARAMETER_BLOCK == 0
         o_Patch[idxOffset].vertices = vec4[3](vec4(v[0], 1.0), vec4(v[1], 1.0), vec4(v[2], 1.0));
         o_Patch[idxOffset].key = key;
@@ -242,7 +232,6 @@ void main()
 #if SHADING_LOD
             //vec2 tessCoord = instancedBaryCoords;
             int keyLod = findMSB(key);
-
 
             vec2 tessCoord = intValToColor2(keyLod);
             //vec2 tessCoord = intValToColor2(int(gl_WorkGroupID.x));

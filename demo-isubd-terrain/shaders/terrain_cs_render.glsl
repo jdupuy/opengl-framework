@@ -4,7 +4,7 @@
 //Include terrain_common.glsl
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implicit Subdivition Sahder for Terrain Rendering
+// Implicit Subdivition Shader for Terrain Rendering
 //
 
 layout (std430, binding = BUFFER_BINDING_CULLED_SUBD)
@@ -58,7 +58,9 @@ void main()
 #endif
 
 #if SHADING_LOD
-    o_TexCoord = i_TessCoord.xy;
+    //o_TexCoord = i_TessCoord.xy;
+    int keyLod = findMSB(key);
+    o_TexCoord = intValToColor2(keyLod);
 #else
     o_TexCoord = finalVertex.xy * 0.5 + 0.5;
 #endif

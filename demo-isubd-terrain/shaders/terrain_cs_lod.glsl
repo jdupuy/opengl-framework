@@ -4,7 +4,7 @@
 //Include terrain_common.glsl
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implicit Subdivision Sahder for Terrain Rendering
+// Implicit Subdivision Shader for Terrain Rendering
 //
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)

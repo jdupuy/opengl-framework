@@ -4,7 +4,7 @@
 //Include terrain_common.glsl
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implicit Subdivition Sahder for Terrain Rendering (using a geometry shader)
+// Implicit Subdivition Shader for Terrain Rendering (using a geometry shader)
 //
 
 layout (std430, binding = BUFFER_BINDING_SUBD1)
@@ -21,7 +21,6 @@ layout (std430, binding = BUFFER_BINDING_GEOMETRY_INDEXES)
 readonly buffer IndexBuffer {
     uint u_IndexBuffer[];
 };
-
 
 
 // -----------------------------------------------------------------------------
@@ -49,7 +48,7 @@ layout(location = 0) out vec2 o_TexCoord;
 
 
 
-void genVertex(in vec4 v[3], vec2 tessCoord)
+void genVertex(in vec4 v[3], vec2 tessCoord, vec2 lodColor)
 {
     vec4 finalVertex = berp(v, tessCoord);
 
@@ -58,7 +57,8 @@ void genVertex(in vec4 v[3], vec2 tessCoord)
 #endif
 
 #if SHADING_LOD
-    o_TexCoord = tessCoord;
+    o_TexCoord = lodColor;
+    //o_TexCoord = tessCoord;
 #else
     o_TexCoord = finalVertex.xy * 0.5 + 0.5;
 #endif
@@ -105,6 +105,10 @@ void main()
 #else
     if (true) {
 #endif // FLAG_CULL
+
+        int keyLod = findMSB(key);
+        vec2 lodColor = intValToColor2(keyLod);
+
         /*
             The code below generates a tessellated triangle with a single triangle strip.
             The algorithm instances strips of 4 vertices, which produces 2 triangles.
@@ -112,9 +116,9 @@ void main()
             only one triangle.
         */
 #if PATCH_SUBD_LEVEL == 0
-        genVertex(v, vec2(0, 0));
-        genVertex(v, vec2(1, 0));
-        genVertex(v, vec2(0, 1));
+        genVertex(v, vec2(0, 0), lodColor);
+        genVertex(v, vec2(1, 0), lodColor);
+        genVertex(v, vec2(0, 1), lodColor);
         EndPrimitive();
 #else
         int subdLevel = 2 * PATCH_SUBD_LEVEL - 1;
@@ -127,10 +131,10 @@ void main()
             vec2 u2 = (xf * vec3(0.0, 0.0, 1)).xy;
             vec2 u3 = (xf * vec3(0.5, 0.5, 1)).xy;
             vec2 u4 = (xf * vec3(1.0, 0.0, 1)).xy;
-            genVertex(v, u1);
-            genVertex(v, u2);
-            genVertex(v, u3);
-            genVertex(v, u4);
+            genVertex(v, u1, lodColor);
+            genVertex(v, u2, lodColor);
+            genVertex(v, u3, lodColor);
+            genVertex(v, u4, lodColor);
         }
         EndPrimitive();
 #endif

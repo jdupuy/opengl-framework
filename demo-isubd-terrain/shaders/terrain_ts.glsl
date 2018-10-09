@@ -12,7 +12,6 @@ readonly buffer SubdBufferIn {
     uvec2 u_SubdBufferIn[];
 };
 
-
 layout (std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
 readonly buffer VertexBuffer {
     vec4 u_VertexBuffer[];
@@ -153,7 +152,10 @@ void main()
 #endif
 
 #if SHADING_LOD
-    o_TexCoord = gl_TessCoord.xy;
+    //o_TexCoord = gl_TessCoord.xy;
+    int keyLod = findMSB(i_Patch[0].key);
+    vec2 lodColor = intValToColor2(keyLod);
+    o_TexCoord = lodColor;
 #else
     o_TexCoord = finalVertex.xy * 0.5 + 0.5;
 #endif
