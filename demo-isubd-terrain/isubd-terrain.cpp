@@ -1172,72 +1172,6 @@ bool loadSubdivisionBuffers()
 
 // -----------------------------------------------------------------------------
 /**
- * Load Subd Counter Buffer
- *
- * This procedure creates a buffer that stores indirect drawing commands.
- * For the compute shader pipeline, two counters are recquired.
- */
-union IndirectCommand {
-    struct {
-        uint32_t num_groups_x,
-            num_groups_y,
-            num_groups_z,
-            align[5];
-    } dispatchIndirect;
-    struct {
-        uint32_t count,
-            primCount,
-            first,
-            baseInstance,
-            align[4];
-    } drawArraysIndirect;
-    struct {
-        uint32_t count,
-            primCount,
-            firstIndex,
-            baseVertex,
-            baseInstance,
-            align[3];
-    } drawElementsIndirect;
-    struct {
-        uint32_t count,
-            first,
-            align[6];
-    } drawMeshTasksIndirectCommandNV;
-};
-
-
-
-bool createIndirectCommandBuffer(GLuint binding, int bufferid, IndirectCommand drawArrays) {
-
-    if (!glIsBuffer(g_gl.buffers[bufferid]))
-        glGenBuffers(1, &g_gl.buffers[bufferid]);
-
-    glBindBuffer(binding, g_gl.buffers[bufferid]);
-    glBufferData(binding, sizeof(drawArrays), &drawArrays, GL_STATIC_DRAW);
-    glBindBuffer(binding, 0);
-
-    return (glGetError() == GL_NO_ERROR);
-}
-
-bool createAtomicCounters(GLint atomicData[8]) {
-
-    if (!glIsBuffer(g_gl.buffers[BUFFER_ATOMIC_COUNTER]))
-        glGenBuffers(1, &g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
-
-    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
-    glBufferData(GL_ATOMIC_COUNTER_BUFFER,
-        sizeof(GLint) * 8,        //8 slots
-        atomicData,
-        GL_STREAM_DRAW);    //GL_STATIC_DRAW
-
-
-    return (glGetError() == GL_NO_ERROR);
-}
-
-
-// -----------------------------------------------------------------------------
-/**
  * Load All Buffers
  *
  */
@@ -1484,6 +1418,69 @@ void release()
 // OpenGL Rendering
 //
 ////////////////////////////////////////////////////////////////////////////////
+
+// -----------------------------------------------------------------------------
+/**
+ * Utility functions
+ */
+union IndirectCommand {
+    struct {
+        uint32_t num_groups_x,
+            num_groups_y,
+            num_groups_z,
+            align[5];
+    } dispatchIndirect;
+    struct {
+        uint32_t count,
+            primCount,
+            first,
+            baseInstance,
+            align[4];
+    } drawArraysIndirect;
+    struct {
+        uint32_t count,
+            primCount,
+            firstIndex,
+            baseVertex,
+            baseInstance,
+            align[3];
+    } drawElementsIndirect;
+    struct {
+        uint32_t count,
+            first,
+            align[6];
+    } drawMeshTasksIndirectCommandNV;
+};
+
+bool
+createIndirectCommandBuffer(
+    GLuint binding,
+    int bufferid,
+    IndirectCommand drawArrays
+) {
+    if (!glIsBuffer(g_gl.buffers[bufferid]))
+        glGenBuffers(1, &g_gl.buffers[bufferid]);
+
+    glBindBuffer(binding, g_gl.buffers[bufferid]);
+    glBufferData(binding, sizeof(drawArrays), &drawArrays, GL_STATIC_DRAW);
+    glBindBuffer(binding, 0);
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+bool createAtomicCounters(GLint atomicData[8])
+{
+    if (!glIsBuffer(g_gl.buffers[BUFFER_ATOMIC_COUNTER]))
+        glGenBuffers(1, &g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+
+    glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+    glBufferData(GL_ATOMIC_COUNTER_BUFFER,
+                 sizeof(GLint) * 8,
+                 atomicData,
+                 GL_STREAM_DRAW);
+
+    return (glGetError() == GL_NO_ERROR);
+}
 
 // -----------------------------------------------------------------------------
 /**
