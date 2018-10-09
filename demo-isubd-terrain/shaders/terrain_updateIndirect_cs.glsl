@@ -31,10 +31,10 @@ void main()
 
     //Reset atomic counters
 #if UPDATE_INDIRECT_RESET_COUNTER1
-    atomicCounterExchange(u_Counter, 0);
+    atomicCounterExchangeARB(u_Counter, 0);
 #endif
 #if UPDATE_INDIRECT_RESET_COUNTER2
-    atomicCounterExchange(u_Counter2, 0);
+    atomicCounterExchangeARB(u_Counter2, 0);
 #endif
 
 }
