@@ -144,9 +144,6 @@ enum { CLOCK_SPF, CLOCK_COUNT };
 enum { FRAMEBUFFER_BACK, FRAMEBUFFER_SCENE, FRAMEBUFFER_COUNT };
 enum {
     STREAM_TRANSFORM,
-    STREAM_SUBD_COUNTER,
-    STREAM_SUBD_COUNTER_PREVIOUS, // compute-based pipeline only
-    STREAM_CULLED_SUBD_COUNTER,   // compute-based pipeline only
     STREAM_COUNT
 };
 enum {
@@ -166,13 +163,19 @@ enum {
     BUFFER_GEOMETRY_VERTICES = STREAM_COUNT,
     BUFFER_GEOMETRY_INDEXES,
     BUFFER_SUBD1, BUFFER_SUBD2,
-    BUFFER_CULLED_SUBD1,   // compute-based pipeline only
+    BUFFER_CULLED_SUBD1,                        // compute-based pipeline only
     BUFFER_INSTANCED_GEOMETRY_VERTICES,         // compute-based pipeline only
     BUFFER_INSTANCED_GEOMETRY_INDEXES,          // compute-based pipeline only
     BUFFER_DISPATCH_INDIRECT,                   // compute-based pipeline only
     BUFFER_DRAW_INDIRECT,
     BUFFER_ATOMIC_COUNTER,						// New Atomic counter buffer
+    BUFFER_ATOMIC_COUNTER2,                     // Just for the binding index
     BUFFER_COUNT
+};
+//Atomic counters bindings
+enum {
+    BINDING_ATOMIC_COUNTER,
+    BINDING_ATOMIC_COUNTER2
 };
 enum {
     PROGRAM_VIEWER,
@@ -181,7 +184,6 @@ enum {
     PROGRAM_TERRAIN,
     PROGRAM_UPDATE_INDIRECT,	//Update indirect structures
     PROGRAM_UPDATE_INDIRECT_DRAW,
-    PROGRAM_RESET_COUNTER,
     PROGRAM_COUNT
 };
 enum {
@@ -467,10 +469,8 @@ void setShaderMacros(djg_program *djp)
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
 
-    djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", STREAM_SUBD_COUNTER);
-    djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", STREAM_CULLED_SUBD_COUNTER);
-
-    djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER_PREVIOUS %i\n", STREAM_SUBD_COUNTER_PREVIOUS);
+    djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER);
+    djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER2);
 
     djgp_push_string(djp, "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n", BUFFER_DISPATCH_INDIRECT);
 
@@ -593,8 +593,8 @@ bool loadUpdateIndirectProgram(int programName, bool updateIndirectStruct, bool 
     djgp_push_string(djp, "#define UPDATE_INDIRECT_RESET_COUNTER2 %i\n", resetCounter2 ? 1 : 0);
 
     djgp_push_string(djp, "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n", BUFFER_DISPATCH_INDIRECT);
-    djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", STREAM_SUBD_COUNTER);
-    djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", STREAM_CULLED_SUBD_COUNTER);
+    djgp_push_string(djp, "#define BINDING_ATOMIC_COUNTER %i\n", BINDING_ATOMIC_COUNTER);
+    djgp_push_string(djp, "#define BINDING_ATOMIC_COUNTER2 %i\n", BINDING_ATOMIC_COUNTER2);
 
     djgp_push_string(djp, "#define UPDATE_INDIRECT_OFFSET %i\n", updateOffset);
     djgp_push_string(djp, "#define UPDATE_INDIRECT_VALUE_DIVIDE %i\n", divideValue);
@@ -650,7 +650,6 @@ bool loadUpdateIndirectPrograms()
 {
     //CC
     if (g_terrain.method == METHOD_TS || g_terrain.method == METHOD_GS) {
-        //loadUpdateIndirectProgram(PROGRAM_RESET_COUNTER, false, true, false, 0, 0, 0);
         loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 0, 1, 0);
     }
 
@@ -1512,10 +1511,10 @@ void release()
 void callUpdateIndirectProgram(int programName, GLuint counter1, GLintptr counterOffset1, GLuint counter2, GLintptr counterOffset2, GLuint indirectBuffer)
 {
     glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_SUBD_COUNTER, counter1, counterOffset1, sizeof(int));
+        BINDING_ATOMIC_COUNTER, counter1, counterOffset1, sizeof(int));
 
     glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_CULLED_SUBD_COUNTER, counter2, counterOffset2, sizeof(int));
+        BINDING_ATOMIC_COUNTER2, counter2, counterOffset2, sizeof(int));
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
         BUFFER_DISPATCH_INDIRECT,
@@ -1555,7 +1554,7 @@ void renderSceneTs() {
     }
 
     glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_SUBD_COUNTER,
+        BINDING_ATOMIC_COUNTER,
         g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
 
 
@@ -1608,7 +1607,7 @@ void renderSceneGs() {
     }
 
     glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_SUBD_COUNTER,
+        BINDING_ATOMIC_COUNTER,
         g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
 
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
@@ -1680,7 +1679,7 @@ void renderSceneMs() {
         g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
 
     glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_SUBD_COUNTER,
+        BINDING_ATOMIC_COUNTER,
         g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
@@ -1756,10 +1755,10 @@ void renderSceneCs() {
         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
 
     glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_SUBD_COUNTER,
+        BINDING_ATOMIC_COUNTER,
         g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
     glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER,
-        STREAM_CULLED_SUBD_COUNTER,
+        BINDING_ATOMIC_COUNTER2,
         g_gl.buffers[BUFFER_DRAW_INDIRECT],
         1 * sizeof(int), 1 * sizeof(int));
 
@@ -2205,6 +2204,11 @@ int main(int argc, char **argv)
         LOG("gladLoadGLLoader failed\n");
         return -1;
     }
+
+
+    //int maxUniformBlocks = 0;
+    //glGetIntegerv(GL_MAX_GEOMETRY_UNIFORM_BLOCKS, &maxUniformBlocks);
+    //LOG("[MAX BLOCKS] : %d\n", maxUniformBlocks);
 
     LOG("-- Begin -- Demo\n");
     try {
