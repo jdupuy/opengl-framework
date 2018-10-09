@@ -86,8 +86,13 @@ void writeKey(uint primID, uint key)
 }
 
 
-void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod, bool isVisible = true)
-{
+void updateSubdBuffer(
+    uint primID,
+    uint key,
+    int targetLod,
+    int parentLod,
+    bool isVisible
+) {
     // extract subdivision level associated to the key
     int keyLod = findMSB(key);
 
@@ -127,3 +132,9 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod, bool 
 #endif
     }
 }
+
+void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
+{
+    updateSubdBuffer(primID, key, targetLod, parentLod, true);
+}
+
