@@ -85,7 +85,7 @@ void main()
         gl_TessLevelInner[1] =
         gl_TessLevelOuter[0] =
         gl_TessLevelOuter[1] =
-	gl_TessLevelOuter[2] = tessLevel;
+        gl_TessLevelOuter[2] = tessLevel;
 
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
