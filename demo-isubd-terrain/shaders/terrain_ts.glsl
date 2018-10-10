@@ -80,27 +80,12 @@ void main()
     if (true) {
 #endif // FLAG_CULL
         // set tess levels
-        //int tessLevel = PATCH_TESS_LEVEL-1;
-
-# if PATCH_SUBD_LEVEL == 2
-		gl_TessLevelInner[0] = PATCH_TESS_LEVEL+0;
-		gl_TessLevelInner[1] = 0;
-		gl_TessLevelOuter[0] = PATCH_TESS_LEVEL-2;
-		gl_TessLevelOuter[1] = PATCH_TESS_LEVEL-2;
-        gl_TessLevelOuter[2] = PATCH_TESS_LEVEL-2;
-# elif PATCH_SUBD_LEVEL == 3
-		gl_TessLevelInner[0] = PATCH_TESS_LEVEL - 2;
-		gl_TessLevelInner[1] = 0;
-		gl_TessLevelOuter[0] = PATCH_TESS_LEVEL - 0;
-		gl_TessLevelOuter[1] = PATCH_TESS_LEVEL - 0;
-		gl_TessLevelOuter[2] = PATCH_TESS_LEVEL - 0;
-# else
-		gl_TessLevelInner[0] = PATCH_TESS_LEVEL;
-		gl_TessLevelInner[1] = 0;
-		gl_TessLevelOuter[0] = PATCH_TESS_LEVEL;
-		gl_TessLevelOuter[1] = PATCH_TESS_LEVEL;
-		gl_TessLevelOuter[2] = PATCH_TESS_LEVEL;
-# endif
+        int tessLevel = PATCH_TESS_LEVEL;
+        gl_TessLevelInner[0] =
+        gl_TessLevelInner[1] =
+        gl_TessLevelOuter[0] =
+        gl_TessLevelOuter[1] =
+		gl_TessLevelOuter[2] = tessLevel;
 
         // set output data
         o_Patch[gl_InvocationID].vertices = v;
