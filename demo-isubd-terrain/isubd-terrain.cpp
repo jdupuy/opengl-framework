@@ -478,7 +478,7 @@ bool loadTerrainProgram()
 
     LOG("Loading {Terrain-Program}\n");
     if (g_terrain.method == METHOD_MS) {
-        djgp_push_string(djp, "#extension GL_NV_mesh_shader : require\n");
+        djgp_push_string(djp, "#ifndef FRAGMENT_SHADER\n#extension GL_NV_mesh_shader : require\n#endif\n");
         djgp_push_string(djp, "#extension GL_NV_shader_thread_group : require\n");
         djgp_push_string(djp, "#extension GL_NV_shader_thread_shuffle : require\n");
         djgp_push_string(djp, "#extension GL_NV_gpu_shader5 : require\n");
