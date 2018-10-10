@@ -204,11 +204,12 @@ void main()
     gl_PrimitiveCountNV = triangleCnt;
 
 
-    int numLoop = (vertexCnt % COMPUTE_THREAD_COUNT) != 0 ? (vertexCnt / COMPUTE_THREAD_COUNT) + 1 : (vertexCnt / COMPUTE_THREAD_COUNT);
+    const int numLoop = (vertexCnt + COMPUTE_THREAD_COUNT-1) / COMPUTE_THREAD_COUNT;
     for (int l = 0; l < numLoop; ++l) {
         int curVert = int(laneID) + l * COMPUTE_THREAD_COUNT;
 
-        if (curVert < vertexCnt) {
+        curVert = min(curVert, vertexCnt - 1);
+        {
 
             vec2 instancedBaryCoords = u_VertexBufferInstanced[curVert];
 
@@ -224,8 +225,6 @@ void main()
             int keyLod = findMSB(key);
 
             vec2 tessCoord = intValToColor2(keyLod);
-            //vec2 tessCoord = intValToColor2(int(gl_WorkGroupID.x));
-            //vec2 tessCoord = intValToColor2( int(i_Patch[id].taskId) );
 #else
             vec2 tessCoord = finalVertex.xy * 0.5 + 0.5;
 #endif
@@ -240,11 +239,12 @@ void main()
     }
 
 
-    int numLoopIdx = (indexCnt % COMPUTE_THREAD_COUNT) != 0 ? (indexCnt / COMPUTE_THREAD_COUNT) + 1 : (indexCnt / COMPUTE_THREAD_COUNT);
+    const int numLoopIdx = (indexCnt + COMPUTE_THREAD_COUNT -1) / COMPUTE_THREAD_COUNT;
     for (int l = 0; l < numLoopIdx; ++l) {
         int curIdx = int(laneID) + l * COMPUTE_THREAD_COUNT;
 
-        if (curIdx < indexCnt) {
+        curIdx = min(curIdx, indexCnt - 1);
+        {
             uint indexVal = u_IndexBufferInstanced[curIdx];
 
             gl_PrimitiveIndicesNV[curIdx] = indexVal;
