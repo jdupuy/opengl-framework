@@ -933,9 +933,15 @@ bool loadTransformBuffer()
 
     // set transformations
     transform.projection = projection;
-    transform.modelView = view * dja::mat4(1);
+    transform.modelView = view;
     transform.modelViewProjection = transform.projection * transform.modelView;
     transform.viewInv = viewInv;
+
+	// transpose manually for AMD
+	transform.projection = dja::transpose(transform.projection);
+	transform.modelView = dja::transpose(transform.modelView);
+	transform.modelViewProjection = dja::transpose(transform.modelViewProjection);
+	transform.viewInv = dja::transpose(transform.viewInv);
 
     // upload to GPU
     djgb_to_gl(g_gl.streams[STREAM_TRANSFORM], (const void *)&transform, NULL);

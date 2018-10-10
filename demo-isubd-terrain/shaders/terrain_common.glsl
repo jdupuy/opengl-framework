@@ -28,8 +28,8 @@ struct Transform {
     mat4 viewInv;
 };
 
-layout(std140, row_major, binding = BUFFER_BINDING_TRANSFORMS)
-uniform Transforms{
+layout(std140, column_major, binding = BUFFER_BINDING_TRANSFORMS)
+uniform Transforms {
     Transform u_Transform;
 };
 
