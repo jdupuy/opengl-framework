@@ -1981,6 +1981,10 @@ void renderGui(double cpuDt, double gpuDt)
                 g_terrain.flags.reset = true;
             }
             if (ImGui::Combo("Method", &g_terrain.method, &eMethods[0], eMethods.size())) {
+                if (g_terrain.method == METHOD_MS && g_terrain.computeThreadCount>5) {
+                    g_terrain.computeThreadCount = 5;
+                }
+
                 loadPrograms();
                 g_terrain.flags.reset = true;
             }
@@ -2023,8 +2027,13 @@ void renderGui(double cpuDt, double gpuDt)
             if (g_terrain.method == METHOD_CS || g_terrain.method == METHOD_MS) {
                 char buf[64];
 
+                int maxValue = 8;
+                if (g_terrain.method == METHOD_MS) {
+                    maxValue = 5;
+                }
+
                 sprintf(buf, "ComputeThreadCount (%02i)", 1 << g_terrain.computeThreadCount);
-                if (ImGui::SliderInt(buf, &g_terrain.computeThreadCount, 0, 8)) {
+                if (ImGui::SliderInt(buf, &g_terrain.computeThreadCount, 0, maxValue)) {
                     loadPrograms();
                     g_terrain.flags.reset = true;
                 }
