@@ -2001,7 +2001,7 @@ void renderGui(double cpuDt, double gpuDt)
                 if (ImGui::Checkbox("displace", &g_terrain.flags.displace))
                     loadTerrainProgram();
             }
-            if (ImGui::SliderInt("PatchSubdLevel", &g_terrain.gpuSubd, 0, 6)) {
+            if (ImGui::SliderInt("PatchSubdLevel", &g_terrain.gpuSubd, 0, 3)) {
                 loadInstancedGeometryBuffers();
                 loadInstancedGeometryVertexArray();
                 loadPrograms();
