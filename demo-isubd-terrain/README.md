@@ -29,4 +29,11 @@ with *fixed* tessellation factors.
 The demo loads a 16-bit displacement map and allows the user to play with the subdivision parameters.
 This source code is released in order to facilitate adoption by developpers.
 
+## Some Notes for Performance Comparisons
+The user can interactively change the rendering pipeline at run-time and see how performance scales. Please do keep in mind however:  
+* We did not extensively optimize the rendering pipelines: We believe that our algorithms can be made faster with careful optimization. This demo is meant to provide the algorithms to implement a fast terrain renderer, but we leave it up to the developper to make it run optimally on the platforms they target. 
+* The tessellation shader pipeline produces more triangles than the other pipelines: Although all rendering pipelines target the same polygon per pixel density, the tessellation produced by the tessellation shader pipeline produces more triangles than the other pipelines. This is because the tessellation units have a built-in triangulation algorithm that we can not control. This is something to keep in mind if rasterization becomes the bottleneck.
+
+
+
 
