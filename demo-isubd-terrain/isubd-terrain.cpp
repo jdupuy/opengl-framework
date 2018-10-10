@@ -1987,7 +1987,7 @@ void renderGui(double cpuDt, double gpuDt)
             ImGui::Text("flags: ");
             ImGui::SameLine();
             if (ImGui::Checkbox("cull", &g_terrain.flags.cull))
-                loadTerrainProgram();
+                loadPrograms();
             ImGui::SameLine();
             ImGui::Checkbox("wire", &g_terrain.flags.wire);
             ImGui::SameLine();
@@ -2010,7 +2010,7 @@ void renderGui(double cpuDt, double gpuDt)
                 LOG("Patch Vertex Count: %d\nPatch Primitive Count: %d\n", instancedMeshVertexCount, instancedMeshPrimitiveCount);
 
             }
-            if (ImGui::SliderFloat("ScreenRes", &g_terrain.primitivePixelLengthTarget, 1, 16)) {
+            if (ImGui::SliderFloat("PixelsPerEdge", &g_terrain.primitivePixelLengthTarget, 1, 16)) {
                 configureTerrainProgram();
                 if (g_terrain.method == METHOD_CS)
                     configureSubdCsLodProgram();
