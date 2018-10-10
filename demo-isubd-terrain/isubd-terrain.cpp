@@ -596,7 +596,13 @@ loadUpdateIndirectProgram(
     char buf[1024];
 
     LOG("Loading {Update-Indirect-Program}\n");
-    djgp_push_string(djp, "#extension GL_ARB_shader_atomic_counter_ops : require\n");
+    if (GLAD_GL_ARB_shader_atomic_counter_ops) {
+        djgp_push_string(djp, "#extension GL_ARB_shader_atomic_counter_ops : require\n");
+        djgp_push_string(djp, "#define ATOMIC_COUNTER_EXCHANGE_ARB 1\n");
+    } else if (GLAD_GL_AMD_shader_atomic_counter_ops) {
+        djgp_push_string(djp, "#extension GL_AMD_shader_atomic_counter_ops : require\n");
+        djgp_push_string(djp, "#define ATOMIC_COUNTER_EXCHANGE_AMD 1\n");
+    }
 
     djgp_push_string(djp, "#define UPDATE_INDIRECT_STRUCT %i\n", updateIndirectStruct ? 1 : 0);
     djgp_push_string(djp, "#define UPDATE_INDIRECT_RESET_COUNTER1 %i\n", resetCounter1 ? 1 : 0);

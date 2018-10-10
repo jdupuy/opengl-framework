@@ -16,6 +16,20 @@ buffer IndirectCommandBuffer {
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
+/**
+ * This function is implemented to intel, AMD, and NVidia GPUs.
+ */
+uint atomicCounterExchangeImpl(atomic_uint c, uint data)
+{
+#if ATOMIC_COUNTER_EXCHANGE_ARB
+    return atomicCounterExchangeARB(c, data);
+#elif ATOMIC_COUNTER_EXCHANGE_AMD
+    return atomicCounterExchange(c, data);
+#else
+#error please configure atomicCounterExchange for your platform
+#endif
+}
+
 void main()
 {
 
@@ -31,10 +45,10 @@ void main()
 
     //Reset atomic counters
 #if UPDATE_INDIRECT_RESET_COUNTER1
-    atomicCounterExchangeARB(u_Counter, 0);
+    atomicCounterExchangeImpl(u_Counter, 0);
 #endif
 #if UPDATE_INDIRECT_RESET_COUNTER2
-    atomicCounterExchangeARB(u_Counter2, 0);
+    atomicCounterExchangeImpl(u_Counter2, 0);
 #endif
 
 }
