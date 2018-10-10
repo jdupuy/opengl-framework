@@ -17,16 +17,6 @@ buffer CulledSubdBuffer {
     uvec2 u_CulledSubdBuffer[];
 };
 
-layout (std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
-readonly buffer VertexBuffer {
-    vec4 u_VertexBuffer[];
-};
-
-layout (std430, binding = BUFFER_BINDING_GEOMETRY_INDEXES)
-readonly buffer IndexBuffer {
-    uint u_IndexBuffer[];
-};
-
 layout(std430, binding = BUFFER_BINDING_INDIRECT_COMMAND)
 buffer IndirectCommandBuffer {
 	uint u_IndirectCommand[8];

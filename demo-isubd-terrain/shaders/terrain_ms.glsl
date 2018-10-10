@@ -19,16 +19,6 @@ readonly buffer SubdBufferIn {
     uvec2 u_SubdBufferIn[];
 };
 
-layout(std430, binding = BUFFER_BINDING_GEOMETRY_VERTICES)
-readonly buffer VertexBuffer {
-    vec4 u_VertexBuffer[];
-};
-
-layout(std430, binding = BUFFER_BINDING_GEOMETRY_INDEXES)
-readonly buffer IndexBuffer {
-    uint u_IndexBuffer[];
-};
-
 layout(std430, binding = BUFFER_BINDING_INSTANCED_GEOMETRY_VERTICES)
 readonly buffer VertexBufferInstanced {
     vec2 u_VertexBufferInstanced[];
