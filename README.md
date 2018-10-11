@@ -5,6 +5,8 @@
 
 (in progress)
 
+### Licence
+
 Apart from the submodule folder, the code from this repository is released in public domain.
 
 ### Cloning
