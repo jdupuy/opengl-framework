@@ -168,7 +168,7 @@ taskNV in Patch{
 
 layout(location = 0) out Interpolants{
     vec2 o_TexCoord;
-} OUT[INSTANCED_MESH_VERTEX_COUNT];
+} OUT[];
 
 void main()
 {
