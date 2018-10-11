@@ -38,7 +38,7 @@ void main()
 #ifdef TESS_CONTROL_SHADER
 layout (vertices = 1) out;
 out Patch {
-    vec3 vertices[3];
+    vec4 vertices[3];
     flat uint key;
 } o_Patch[];
 
@@ -51,15 +51,15 @@ void main()
 
     // get coarse triangle associated to the key
     uint primID = u_SubdBufferIn[threadID].x;
-    vec3 v_in[3] = vec3[3](
-        u_VertexBuffer[u_IndexBuffer[primID * 3    ]].xyz,
-        u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]].xyz,
-        u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]].xyz
+    vec4 v_in[3] = vec4[3](
+        u_VertexBuffer[u_IndexBuffer[primID * 3    ]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 1]],
+        u_VertexBuffer[u_IndexBuffer[primID * 3 + 2]]
     );
 
     // compute distance-based LOD
     uint key = u_SubdBufferIn[threadID].y;
-    vec3 v[3], vp[3]; subd(key, v_in, v, vp);
+    vec4 v[3], vp[3]; subd(key, v_in, v, vp);
     int targetLod = int(computeLod(v));
     int parentLod = int(computeLod(vp));
 #if FLAG_FREEZE
@@ -70,8 +70,8 @@ void main()
 #if FLAG_CULL
     // Cull invisible nodes
     mat4 mvp = u_Transform.modelViewProjection;
-    vec3 bmin = min(min(v[0], v[1]), v[2]);
-    vec3 bmax = max(max(v[0], v[1]), v[2]);
+    vec4 bmin = min(min(v[0], v[1]), v[2]);
+    vec4 bmax = max(max(v[0], v[1]), v[2]);
 
     // account for displacement in bound computations
 #   if FLAG_DISPLACE
@@ -115,7 +115,7 @@ void main()
 #ifdef TESS_EVALUATION_SHADER
 layout (triangles, ccw, equal_spacing) in;
 in Patch {
-    vec3 vertices[3];
+    vec4 vertices[3];
     flat uint key;
 } i_Patch[];
 
@@ -123,8 +123,8 @@ layout(location = 0) out vec2 o_TexCoord;
 
 void main()
 {
-    vec3 v[3] = i_Patch[0].vertices;
-    vec3 finalVertex = berp(v, gl_TessCoord.xy);
+    vec4 v[3] = i_Patch[0].vertices;
+    vec4 finalVertex = berp(v, gl_TessCoord.xy);
 
 #if FLAG_DISPLACE
     finalVertex.z+= dmap(finalVertex.xy);
@@ -139,7 +139,7 @@ void main()
     o_TexCoord = finalVertex.xy * 0.5 + 0.5;
 #endif
 
-    gl_Position = u_Transform.modelViewProjection * vec4(finalVertex, 1.0);
+    gl_Position = u_Transform.modelViewProjection * finalVertex;
 }
 #endif
 
