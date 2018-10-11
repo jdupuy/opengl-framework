@@ -114,7 +114,7 @@ void updateSubdBuffer(
         writeKey(primID, children[0]);
         writeKey(primID, children[1]);
     }
-    else if (/* keep ? */ keyLod < (parentLod + 1)) {
+    else if (/* keep ? */ keyLod < (parentLod + 1) && isVisible) {
         writeKey(primID, key);
     }
     else /* merge ? */ {

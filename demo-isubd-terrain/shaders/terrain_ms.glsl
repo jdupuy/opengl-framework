@@ -8,6 +8,7 @@
 */
 
 #define USE_OPTIMIZED_TASK_PARAMETER_BLOCK          1
+#define USE_SUBD_KEYS_CULLING                       0       //Experimental
 
 #define NUM_CLIPPING_PLANES                         6
 
@@ -98,22 +99,33 @@ void main()
 
 
 #if FLAG_CULL
+#   if USE_SUBD_KEYS_CULLING==0
+#     define CULLING_USED_TRIANGLE v
+#   else
+#     define CULLING_USED_TRIANGLE vp
+#   endif
+
         // Cull invisible nodes
         mat4 mvp = u_Transform.modelViewProjection;
-        vec3 bmin = min(min(v[0], v[1]), v[2]);
-        vec3 bmax = max(max(v[0], v[1]), v[2]);
+        vec3 bmin = min(min(CULLING_USED_TRIANGLE[0], CULLING_USED_TRIANGLE[1]), CULLING_USED_TRIANGLE[2]);
+        vec3 bmax = max(max(CULLING_USED_TRIANGLE[0], CULLING_USED_TRIANGLE[1]), CULLING_USED_TRIANGLE[2]);
 
         // account for displacement in bound computations
 #   if FLAG_DISPLACE
         bmin.z = 0;
         bmax.z = u_DmapFactor;
 #   endif
-
+#   if USE_SUBD_KEYS_CULLING==0 || FLAG_FREEZE == 0
         isVisible = frustumCullingTest(mvp, bmin.xyz, bmax.xyz);
+#   endif
 #endif // FLAG_CULL
 
 
-        updateSubdBuffer(primID, key, targetLod, parentLod);
+        updateSubdBuffer(primID, key, targetLod, parentLod
+#if USE_SUBD_KEYS_CULLING
+            , isVisible
+#endif
+        );
     }
 
 

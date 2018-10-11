@@ -1036,17 +1036,6 @@ dja::mat3 keyToXform(uint32_t key)
 
 bool loadInstancedGeometryBuffers()
 {
-    if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]))
-        glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
-    glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
-    glBindBuffer(GL_ARRAY_BUFFER,
-        g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
-    if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]))
-        glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
-    glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-        g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
-
     bool buffAllocated = false;
     dja::vec2 *vertices;
     uint16_t *indexes;
@@ -1121,28 +1110,40 @@ bool loadInstancedGeometryBuffers()
         }
     }
 
+    const GLsizeiptr bufferAllocationGranularity = 1024;        //Avoids alignment issues
 
     LOG("Loading {Instanced-Vertex-Buffer}\n");
-    glBufferData(GL_ARRAY_BUFFER,
-        sizeof(dja::vec2) * instancedMeshVertexCount,
-        (const void*)vertices,
-        GL_STATIC_DRAW);
+    if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]))
+        glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glBindBuffer(GL_ARRAY_BUFFER, g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+
+    GLsizeiptr allocVertexBufferSize = sizeof(dja::vec2) * instancedMeshVertexCount;
+    allocVertexBufferSize = ((allocVertexBufferSize + bufferAllocationGranularity - 1) / bufferAllocationGranularity) * bufferAllocationGranularity;
+    glBufferStorage(GL_ARRAY_BUFFER, allocVertexBufferSize, NULL, GL_DYNAMIC_STORAGE_BIT);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(dja::vec2) * instancedMeshVertexCount, (const void*)vertices);
+
 
     LOG("Loading {Instanced-Index-Buffer}\n");
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-        sizeof(uint16_t) * instancedMeshPrimitiveCount * 3,
-        (const void *)indexes,
-        GL_STATIC_DRAW);
+    if (glIsBuffer(g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]))
+        glDeleteBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+    glGenBuffers(1, &g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+
+    GLsizeiptr allocIndexBufferSize = sizeof(uint16_t) * instancedMeshPrimitiveCount * 3;
+    allocIndexBufferSize = ((allocIndexBufferSize + bufferAllocationGranularity - 1) / bufferAllocationGranularity) * bufferAllocationGranularity;
+    glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, allocIndexBufferSize, NULL, GL_DYNAMIC_STORAGE_BIT);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, sizeof(uint16_t) * instancedMeshPrimitiveCount * 3, (const void*)indexes);
+
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 
     if (buffAllocated) {
         delete[] vertices;
         delete[] indexes;
     }
-
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     return (glGetError() == GL_NO_ERROR);
 }
