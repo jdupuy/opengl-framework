@@ -1,7 +1,10 @@
-#line 2
-//The rest of the code is inside those headers which are included by the C-code:
-//Include isubd.glsl
-//Include terrain_common.glsl
+/* terrain_cs_render.glsl - public domain
+    (created by Jonathan Dupuy and Cyril Crassin)
+
+    This code has dependencies on the following GLSL sources:
+    - isubd.glsl
+    - terrain_common.glsl
+*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Implicit Subdivition Shader for Terrain Rendering

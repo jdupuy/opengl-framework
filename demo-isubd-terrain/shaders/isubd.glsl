@@ -1,4 +1,8 @@
-#line 1
+/* isubd.glsl - public domain implicit subdivision on the GPU
+    (created by Jonathan Dupuy)
+*/
+
+#line 5
 
 uint parentKey(in uint key)
 {

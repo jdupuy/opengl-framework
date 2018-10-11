@@ -2,6 +2,10 @@
 
 ![alt text](preview.png "Preview")
 
+## Licence
+This code is public domain.
+
+## Details
 This demo provides additional implementations for the article 
 "Adaptive GPU Tessellation with Compute Shaders" by 
 [Jad Khoury](https://github.com/jadkhoury), 

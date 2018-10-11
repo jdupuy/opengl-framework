@@ -1,4 +1,8 @@
-#line 1
+/* terrain_common.glsl - public domain
+    (created by Jonathan Dupuy and Cyril Crassin)
+*/
+
+#line 5
 //The rest of the code is inside those headers which are included by the C-code:
 //Include isubd.glsl
 
