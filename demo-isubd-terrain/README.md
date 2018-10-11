@@ -2,6 +2,10 @@
 
 ![alt text](preview.png "Preview")
 
+## Licence
+This code is public domain.
+
+## Details
 This demo provides additional implementations for the article 
 "Adaptive GPU Tessellation with Compute Shaders" by 
 [Jad Khoury](https://github.com/jadkhoury), 
@@ -34,7 +38,6 @@ The user can interactively change the rendering pipeline at run-time and see how
 * We did not extensively optimize the rendering pipelines: We believe that our algorithms can be made faster with careful optimization. This demo is meant to provide the algorithms to implement a fast terrain renderer, but we leave it up to the developper to make it run optimally on the platforms they target. 
 * The tessellation shader pipeline produces more triangles than the other pipelines: Although all rendering pipelines target the same polygon per pixel density, the tessellation produced by the tessellation shader pipeline produces more triangles than the other pipelines. This is because GPU tessellation units have a fixed, hardware accelerated triangulation algorithm that differs from the one we use in the other rendering pipelines. This is something to keep in mind if rasterization becomes the bottleneck.
 
-## Licence
-This code is public domain.
+
 
 
