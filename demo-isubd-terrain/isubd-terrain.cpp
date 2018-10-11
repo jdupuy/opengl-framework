@@ -1,6 +1,6 @@
-////////////////////////////////////////////////////////////////////////////////
-// Implicit Subdivition for Terrain Rendering
-//
+/* isubd-terrain.cpp - public domain Implicit Subdivition for Terrain Rendering
+    (created by Jonathan Dupuy)
+*/
 
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"

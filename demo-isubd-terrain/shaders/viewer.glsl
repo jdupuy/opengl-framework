@@ -1,3 +1,7 @@
+/* viewer.glsl - public domain
+    (created by Jonathan Dupuy)
+*/
+
 uniform float u_Exposure;
 uniform float u_Gamma;
 

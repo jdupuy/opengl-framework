@@ -1,4 +1,7 @@
-#line 1
+/* terrain_updateIndirect_cs.glsl - public domain
+    (created by Jonathan Dupuy and Cyril Crassin)
+
+*/
 
 #ifdef COMPUTE_SHADER
 layout(binding = BINDING_ATOMIC_COUNTER)
