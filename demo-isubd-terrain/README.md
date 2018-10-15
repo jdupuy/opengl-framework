@@ -2,7 +2,7 @@
 
 ![alt text](preview.png "Preview")
 
-## Licence
+## License
 This code is public domain.
 
 ## Details
