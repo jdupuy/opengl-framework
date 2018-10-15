@@ -7,7 +7,7 @@
 
 The goal of this repository is to compile OpenGL programs I have written and I find worth sharing. This includes programs I used to generate results of technical papers I have published, or written just for fun :)
 
-### Licence
+### License
 
 Apart from the submodule folder, the code from this repository is released in public domain.
 
