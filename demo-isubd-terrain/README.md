@@ -7,7 +7,7 @@ This code is public domain.
 
 ## Details
 This demo provides additional implementations for the article 
-"Adaptive GPU Tessellation with Compute Shaders" by 
+"[Adaptive GPU Tessellation with Compute Shaders](http://onrendering.com/data/papers/isubd/isubd.pdf)" by 
 [Jad Khoury](https://github.com/jadkhoury), 
 [Jonathan Dupuy](http://onrendering.com/) (myself) and 
 [Christophe Riccio](https://github.com/g-truc); 
