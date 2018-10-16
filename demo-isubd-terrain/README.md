@@ -17,18 +17,15 @@ Many thanks to [Cyril Crassin](https://twitter.com/Icare3D) (from NVIDIA) for
 helping me putting this demo up (the mesh shader pipeline exists thanks to 
 his help). 
 
-Specifically, the demo provides up to 4 rendering techniques:
+Specifically, the demo renders a terrain with an adaptive mesh that is handled entirely on the GPU. The adaptive mesh is built from an implicit representation that works similarly to a binary tree. Each node of the tree is further triangulated with a constant tessellation factors. Our code can achieve this via 4 different rendering techniques:
 
 * *Compute Shader* -- Similar to that of the original article; original demo available here: https://github.com/jadkhoury/TessellationDemo.
 
-* *Tessellation Shader* -- Single-pass rendering with tessellation shaders; the tessellation shader produces a grid with *fixed* 
-tessellation factors.
+* *Tessellation Shader* -- Single-pass rendering with tessellation shaders; the tessellation control shader produces the triangulation at each node of the implicit binary tree (via *fixed* tessellation factors).
 
-* *Geometry Shader* -- Single-pass rendering with a geometry shader; the geometry shader produces a grid with *fixed* 
-tessellation factors.
+* *Geometry Shader* -- Single-pass rendering with a geometry shader; the geometry shader produces the triangulation at each node of the implicit binary tree.
 
-* *Mesh Shader* -- Single-pass rendering with a task and mesh shader (Turing GPUs only); the mesh shader produces a grid 
-with *fixed* tessellation factors. 
+* *Mesh Shader* -- Single-pass rendering with a task and mesh shader (Turing GPUs only); the mesh shader produces the triangulation at each node of the implicit binary tree.
 
 The demo loads a 16-bit displacement map and allows the user to play with the subdivision parameters.
 This source code is released in order to facilitate adoption by developpers.
