@@ -17,7 +17,7 @@ Many thanks to [Cyril Crassin](https://twitter.com/Icare3D) (from NVIDIA) for
 helping me putting this demo up (the mesh shader pipeline exists thanks to 
 his help). 
 
-Specifically, the demo renders a terrain with an adaptive mesh that is handled entirely on the GPU. The adaptive mesh is built from an implicit representation that works similarly to a binary tree, which can undergo up to 31 subdivisions (this exceeds by far the capabilities of current GPU tessellation units, which are limited to 6 levels). Each node of the tree is further triangulated with a constant tessellation factors. Our code can achieve this via 4 different rendering techniques:
+Specifically, the demo renders a terrain with an adaptive mesh that is handled entirely on the GPU. The adaptive mesh is built from an implicit representation that works similarly to a binary tree, which can undergo up to 31 subdivisions (this exceeds by far the capabilities of current GPU tessellation units, which are limited to 6 levels). Each node of the tree is further triangulated with a constant tessellation factor that can be modified by the user. Our code can achieve this via 4 different rendering techniques:
 
 * *Compute Shader* -- Similar to that of the original article; original demo available here: https://github.com/jadkhoury/TessellationDemo.
 
