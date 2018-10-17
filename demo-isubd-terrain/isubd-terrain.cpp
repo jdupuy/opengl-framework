@@ -47,6 +47,9 @@
 //Forces use of ad-hoc instanced geometry definition, with better vertex reuse
 #define USE_ADHOC_INSTANCED_GEOM        1
 
+//New: In place update of the subd buffer
+#define USE_SUBD_IN_PLACE_UPDATE        1
+
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 //
@@ -85,7 +88,12 @@ struct CameraManager {
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
-enum { METHOD_TS, METHOD_GS, METHOD_CS, METHOD_MS };
+enum { METHOD_TS, METHOD_GS, METHOD_CS, METHOD_MS 
+#if USE_SUBD_IN_PLACE_UPDATE
+    , METHOD_MS_INPLACE
+#endif
+
+};
 enum { SHADING_DIFFUSE, SHADING_NORMALS, SHADING_LOD };
 struct TerrainManager {
     struct { bool displace, cull, freeze, wire, reset, freeze_step; } flags;
@@ -1712,6 +1720,71 @@ void renderSceneMs() {
     offset = nextOffset;
 }
 
+#if USE_SUBD_IN_PLACE_UPDATE
+
+void renderSceneMs_InPlace() {
+    static int offset = 0;
+    int nextOffset = 0;
+
+    // Init
+    if (g_terrain.flags.reset) {
+        GLint atomicData[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        IndirectCommand cmd = {
+            2u / (1u << g_terrain.computeThreadCount) + 1u,
+            0u, 0u, 0u, 0u, 0u, 0u, 2u        //Hack:last value is number of primitives
+        };
+
+        loadSubdivisionBuffers();
+        createAtomicCounters(atomicData);
+        createIndirectCommandBuffer(GL_DRAW_INDIRECT_BUFFER,
+            BUFFER_DISPATCH_INDIRECT,
+            cmd);
+
+        g_terrain.pingPong = 1;
+        offset = 0;
+        g_terrain.flags.reset = false;
+    }
+
+    // Bind buffers to binding points
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+        BUFFER_INSTANCED_GEOMETRY_VERTICES,
+        g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_VERTICES]);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+        BUFFER_INSTANCED_GEOMETRY_INDEXES,
+        g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+        BUFFER_SUBD1,
+        g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+        BUFFER_SUBD2,
+        g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
+    glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
+        BINDING_ATOMIC_COUNTER,
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+        BUFFER_DISPATCH_INDIRECT,
+        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER,
+        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+
+    // draw terrain
+    glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
+    glDrawMeshTasksIndirectNV(0);
+
+    // update batch
+    callUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT,
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
+        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+
+    g_terrain.pingPong = 1 - g_terrain.pingPong;
+    offset = nextOffset;
+}
+
+#endif
+
+
 // -----------------------------------------------------------------------------
 /**
  * Terrain Rendering -- Compute Shader Pipeline
@@ -1966,8 +2039,13 @@ void renderGui(double cpuDt, double gpuDt)
                 "Geometry Shader",
                 "Compute Shader"
             };
-            if (GLAD_GL_NV_mesh_shader)
+            if (GLAD_GL_NV_mesh_shader) {
                 eMethods.push_back("Mesh Shader");
+#if USE_SUBD_IN_PLACE_UPDATE
+                eMethods.push_back("Mesh Shader InPlace");
+#endif
+            }
+
             ImGui::Text("CPU_dt: %.3f %s",
                 cpuDt < 1. ? cpuDt * 1e3 : cpuDt,
                 cpuDt < 1. ? "ms" : " s");
