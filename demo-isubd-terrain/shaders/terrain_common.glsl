@@ -1,8 +1,8 @@
 /* terrain_common.glsl - public domain
     (created by Jonathan Dupuy and Cyril Crassin)
 */
-
 #line 5
+
 //The rest of the code is inside those headers which are included by the C-code:
 //Include isubd.glsl
 
@@ -16,14 +16,20 @@ readonly buffer IndexBuffer {
     uint u_IndexBuffer[];
 };
 
-
-layout(binding = BUFFER_BINDING_SUBD_COUNTER)
-uniform atomic_uint u_SubdBufferCounter;
-
 layout(std430, binding = BUFFER_BINDING_SUBD2)
 buffer SubdBufferOut {
     uvec2 u_SubdBufferOut[];
 };
+
+
+
+#if USE_SUBD_IN_PLACE_UPDATE == 0
+layout(binding = BUFFER_BINDING_SUBD_COUNTER) uniform atomic_uint u_SubdBufferCounter;
+#else
+layout(binding = COUNTER_BINDING_SUBD_END) uniform atomic_uint u_SubdBufferCounterEnd;
+layout(binding = COUNTER_BINDING_SUBD_FRONT) uniform atomic_uint u_SubdBufferCounterFront;
+#endif
+
 
 struct Transform {
     mat4 modelView;
@@ -89,6 +95,8 @@ float computeLod(in vec3 v[3])
     return computeLod(c);
 }
 
+#if USE_SUBD_IN_PLACE_UPDATE == 0
+
 void writeKey(uint primID, uint key)
 {
     uint idx = atomicCounterIncrement(u_SubdBufferCounter);
@@ -96,6 +104,13 @@ void writeKey(uint primID, uint key)
     u_SubdBufferOut[idx] = uvec2(primID, key);
 }
 
+void writeKeys(uint primID, uint keys[2])
+{
+    uint idx = atomicCounterAdd(u_SubdBufferCounter, 2);
+
+    u_SubdBufferOut[idx] = uvec2(primID, keys[0]);
+    u_SubdBufferOut[idx + 1] = uvec2(primID, keys[1]);
+}
 
 void updateSubdBuffer(
     uint primID,
@@ -111,8 +126,9 @@ void updateSubdBuffer(
     if (/* subdivide ? */ keyLod < targetLod && !isLeafKey(key) && isVisible) {
         uint children[2]; childrenKeys(key, children);
 
-        writeKey(primID, children[0]);
-        writeKey(primID, children[1]);
+        //writeKey(primID, children[0]);
+        //writeKey(primID, children[1]);
+        writeKeys(primID, children);
     }
     else if (/* keep ? */ keyLod < (parentLod + 1) && isVisible) {
         writeKey(primID, key);
@@ -148,6 +164,111 @@ void updateSubdBuffer(uint primID, uint key, int targetLod, int parentLod)
 {
     updateSubdBuffer(primID, key, targetLod, parentLod, true);
 }
+
+#else
+
+layout(std430, binding = BUFFER_BINDING_SUBD1)
+coherent volatile buffer SubdBufferIn {
+    uvec2 u_SubdBufferIn[];
+};
+
+
+void insertKeys(uint primID, uint keys[2])
+{
+    uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 2) % SUBD_BUFFER_CAPACITY;
+
+    u_SubdBufferIn[idx] = uvec2(primID, keys[0]);
+    u_SubdBufferIn[idx+1] = uvec2(primID, keys[1]);
+}
+
+void insertKey(uint primID, uint key)
+{
+    uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 1) % SUBD_BUFFER_CAPACITY;
+
+    u_SubdBufferIn[idx] = uvec2(primID, key);
+}
+
+void deleteKey(uint keyIdx)
+{
+    if (keyIdx > atomicCounter(u_SubdBufferCounterFront)) {
+        uint movedIdx = atomicCounterAdd(u_SubdBufferCounterFront, 1) % SUBD_BUFFER_CAPACITY;
+
+        if (movedIdx < keyIdx) {
+            u_SubdBufferIn[keyIdx] = u_SubdBufferIn[movedIdx];
+            //u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+        }
+    }
+}
+
+void updateSubdBuffer(
+    uint keyIdx,
+    uint primID,
+    uint key,
+    int targetLod,
+    int parentLod,
+    bool isVisible
+) {
+    // extract subdivision level associated to the key
+    int keyLod = findMSB(key);
+
+    // update the key accordingly
+    if (/* subdivide ? */ keyLod < targetLod && !isLeafKey(key) && isVisible) {
+        uint children[2]; childrenKeys(key, children);
+
+        //Delete current
+        u_SubdBufferIn[keyIdx] = uvec2(0, 0);
+        //deleteKey(keyIdx);
+
+        //Insert children
+        insertKeys(primID, children);
+    }
+    else if (/* keep ? */ keyLod < (parentLod + 1) && isVisible) {
+        //Do nothing, keeps key.
+    }
+    else /* merge ? */ {
+
+        if (/* is root ? */isRootKey(key))
+        {
+            //writeKey(primID, key);
+            //Keep the same
+        }
+#if 1
+        else{
+            //Delete current key
+            u_SubdBufferIn[keyIdx] = uvec2(0, 0);
+            //deleteKey(keyIdx);
+
+            //Insert parent
+            if (/* is zero child ? */isChildZeroKey(key)) {
+                insertKey(primID, parentKey(key));
+            }
+        }
+#else
+        //Experiments to fix missing triangles when merging
+        else {
+            int numMergeLevels = keyLod - (parentLod);
+
+            uint mergeMask = (key & ((1 << numMergeLevels) - 1));
+            if (mergeMask == 0)
+            {
+                key = (key >> numMergeLevels);
+                writeKey(primID, key);
+            }
+
+        }
+#endif
+    }
+}
+
+void updateSubdBuffer(uint keyIdx, uint primID, uint key, int targetLod, int parentLod)
+{
+    updateSubdBuffer(keyIdx, primID, key, targetLod, parentLod, true);
+}
+
+#endif
+
+
+
 
 vec4 shadeFragment(vec2 texCoord)
 {

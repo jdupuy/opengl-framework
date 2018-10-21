@@ -36,6 +36,8 @@
 #define VIEWER_DEFAULT_WIDTH  1680
 #define VIEWER_DEFAULT_HEIGHT 1050
 
+const size_t subdBufferCapacity = 1 << 28;
+
 // default path to the directory holding the source files
 #ifndef PATH_TO_SRC_DIRECTORY
 #   define PATH_TO_SRC_DIRECTORY "./"
@@ -177,7 +179,6 @@ enum {
     BUFFER_DISPATCH_INDIRECT,                   // compute-based pipeline only
     BUFFER_DRAW_INDIRECT,
     BUFFER_ATOMIC_COUNTER,                      // New Atomic counter buffer
-    BUFFER_ATOMIC_COUNTER2,                     // Just for the binding index
     BUFFER_COUNT
 };
 //Atomic counters bindings
@@ -466,9 +467,24 @@ void setShaderMacros(djg_program *djp)
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
+
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER2);
+
     djgp_push_string(djp, "#define BUFFER_BINDING_INDIRECT_COMMAND %i\n", BUFFER_DISPATCH_INDIRECT);
+
+    djgp_push_string(djp, "#define SUBD_BUFFER_CAPACITY %i\n", (subdBufferCapacity/(sizeof(uint32_t)*2)) );
+
+    if (g_terrain.method == METHOD_MS_INPLACE) {
+        djgp_push_string(djp, "#define USE_SUBD_IN_PLACE_UPDATE %i\n", 1);
+
+        djgp_push_string(djp, "#define COUNTER_BINDING_SUBD_END %i\n", BINDING_ATOMIC_COUNTER);
+        djgp_push_string(djp, "#define COUNTER_BINDING_SUBD_FRONT %i\n", BINDING_ATOMIC_COUNTER2);
+
+    } else {
+        djgp_push_string(djp, "#define USE_SUBD_IN_PLACE_UPDATE %i\n", 0);
+    }
+    
 }
 
 // -----------------------------------------------------------------------------
@@ -485,7 +501,7 @@ bool loadTerrainProgram()
     char buf[1024];
 
     LOG("Loading {Terrain-Program}\n");
-    if (g_terrain.method == METHOD_MS) {
+    if (g_terrain.method == METHOD_MS || g_terrain.method == METHOD_MS_INPLACE) {
         djgp_push_string(djp, "#ifndef FRAGMENT_SHADER\n#extension GL_NV_mesh_shader : require\n#endif\n");
         djgp_push_string(djp, "#extension GL_NV_shader_thread_group : require\n");
         djgp_push_string(djp, "#extension GL_NV_shader_thread_shuffle : require\n");
@@ -511,9 +527,12 @@ bool loadTerrainProgram()
     case METHOD_MS:
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_ms.glsl"));
         break;
+    case METHOD_MS_INPLACE:
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_inplace_ms.glsl"));
+        break;
     }
 
-    if (!djgp_to_gl(djp, 450, false, true, program)) {
+    if (!djgp_to_gl(djp, 460, false, true, program)) {
         LOG("=> Failure <=\n");
         djgp_release(djp);
 
@@ -559,7 +578,7 @@ bool loadSubdCsLodProgram()
 
         djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_cs_lod.glsl"));
 
-        if (!djgp_to_gl(djp, 450, false, true, program)) {
+        if (!djgp_to_gl(djp, 460, false, true, program)) {
             LOG("=> Failure <=\n");
             djgp_release(djp);
 
@@ -593,6 +612,7 @@ bool
 loadUpdateIndirectProgram(
     int programName,
     bool updateIndirectStruct,
+    bool useCounterRange,
     bool resetCounter1,
     bool resetCounter2,
     int updateOffset,
@@ -613,6 +633,7 @@ loadUpdateIndirectProgram(
     }
 
     djgp_push_string(djp, "#define UPDATE_INDIRECT_STRUCT %i\n", updateIndirectStruct ? 1 : 0);
+    djgp_push_string(djp, "#define UPDATE_INDIRECT_USE_RANGE %i\n", useCounterRange ? 1 : 0);
     djgp_push_string(djp, "#define UPDATE_INDIRECT_RESET_COUNTER1 %i\n", resetCounter1 ? 1 : 0);
     djgp_push_string(djp, "#define UPDATE_INDIRECT_RESET_COUNTER2 %i\n", resetCounter2 ? 1 : 0);
 
@@ -644,12 +665,14 @@ bool loadUpdateIndirectPrograms()
     switch (g_terrain.method) {
     case METHOD_TS:
     case METHOD_GS:
-        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 0, 1, 0);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, false, true, false, 0, 1, 0);
     case METHOD_CS:
-        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, true, 0, 1 << g_terrain.computeThreadCount, 1)
-        && loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, true, false, 1, 1, 0);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, false, true, true, 0, 1 << g_terrain.computeThreadCount, 1)
+        && loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT_DRAW, true, false, true, false, 1, 1, 0);
     case METHOD_MS:
-        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, false, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
+    case METHOD_MS_INPLACE:
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, false, 0, 1 << g_terrain.computeThreadCount, 1);
     }
 
     return (glGetError() == GL_NO_ERROR);
@@ -1164,6 +1187,7 @@ bool loadInstancedGeometryBuffers()
 void loadSubdBuffer(int id, size_t bufferCapacity)
 {
     const uint32_t data[] = { 0, 1, 1, 1 };
+    //const uint32_t data[] = { 0,0, 0,0,  0, 1, 1, 1 };
 
     if (glIsBuffer(g_gl.buffers[id]))
         glDeleteBuffers(1, &g_gl.buffers[id]);
@@ -1179,14 +1203,13 @@ void loadSubdBuffer(int id, size_t bufferCapacity)
 bool loadSubdivisionBuffers()
 {
     LOG("Loading {Subd-Buffer}\n");
-    const size_t bufferCapacity = 1 << 28;
 
-    loadSubdBuffer(BUFFER_SUBD1, bufferCapacity);
-    loadSubdBuffer(BUFFER_SUBD2, bufferCapacity);
+    loadSubdBuffer(BUFFER_SUBD1, subdBufferCapacity);
+    loadSubdBuffer(BUFFER_SUBD2, subdBufferCapacity);
     if (g_terrain.method == METHOD_CS) {
         LOG("Loading {Culled-Subd-Buffer}\n");
-        loadSubdBuffer(BUFFER_CULLED_SUBD1, bufferCapacity);
-        //loadSubdBuffer(BUFFER_CULLED_SUBD2, bufferCapacity);
+        loadSubdBuffer(BUFFER_CULLED_SUBD1, subdBufferCapacity);
+        //loadSubdBuffer(BUFFER_CULLED_SUBD2, subdBufferCapacity);
     }
 
     return (glGetError() == GL_NO_ERROR);
@@ -1728,7 +1751,7 @@ void renderSceneMs_InPlace() {
 
     // Init
     if (g_terrain.flags.reset) {
-        GLint atomicData[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        GLint atomicData[] = { 2, 0, 0, 0, 0, 0, 0, 0 };
         IndirectCommand cmd = {
             2u / (1u << g_terrain.computeThreadCount) + 1u,
             0u, 0u, 0u, 0u, 0u, 0u, 2u        //Hack:last value is number of primitives
@@ -1740,10 +1763,11 @@ void renderSceneMs_InPlace() {
             BUFFER_DISPATCH_INDIRECT,
             cmd);
 
-        g_terrain.pingPong = 1;
         offset = 0;
         g_terrain.flags.reset = false;
     }
+
+    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
 
     // Bind buffers to binding points
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
@@ -1752,16 +1776,14 @@ void renderSceneMs_InPlace() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
         BUFFER_INSTANCED_GEOMETRY_INDEXES,
         g_gl.buffers[BUFFER_INSTANCED_GEOMETRY_INDEXES]);
-    glBindVertexArray(g_gl.vertexArrays[VERTEXARRAY_EMPTY]);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-        BUFFER_SUBD1,
-        g_gl.buffers[BUFFER_SUBD1 + 1 - g_terrain.pingPong]);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-        BUFFER_SUBD2,
-        g_gl.buffers[BUFFER_SUBD1 + g_terrain.pingPong]);
-    glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER,
-        BINDING_ATOMIC_COUNTER,
-        g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BUFFER_SUBD1, g_gl.buffers[BUFFER_SUBD1]);
+
+    glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+    //glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER2, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+    glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER2, g_gl.buffers[BUFFER_ATOMIC_COUNTER], sizeof(uint32_t) * 1, sizeof(uint32_t));
+
+
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
         BUFFER_DISPATCH_INDIRECT,
         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
@@ -1775,10 +1797,9 @@ void renderSceneMs_InPlace() {
     // update batch
     callUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT,
         g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
-        g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER], sizeof(uint32_t),
         g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
 
-    g_terrain.pingPong = 1 - g_terrain.pingPong;
     offset = nextOffset;
 }
 
@@ -1906,6 +1927,9 @@ void renderScene()
         break;
     case METHOD_MS:
         renderSceneMs();
+        break;
+    case METHOD_MS_INPLACE:
+        renderSceneMs_InPlace();
         break;
     default:
         break;
@@ -2058,7 +2082,7 @@ void renderGui(double cpuDt, double gpuDt)
                 g_terrain.flags.reset = true;
             }
             if (ImGui::Combo("Method", &g_terrain.method, &eMethods[0], eMethods.size())) {
-                if (g_terrain.method == METHOD_MS && g_terrain.computeThreadCount>5) {
+                if ( (g_terrain.method == METHOD_MS || g_terrain.method == METHOD_MS_INPLACE) && g_terrain.computeThreadCount>5) {
                     g_terrain.computeThreadCount = 5;
                 }
 
@@ -2101,11 +2125,11 @@ void renderGui(double cpuDt, double gpuDt)
                 if (g_terrain.method == METHOD_CS)
                     configureSubdCsLodProgram();
             }
-            if (g_terrain.method == METHOD_CS || g_terrain.method == METHOD_MS) {
+            if (g_terrain.method == METHOD_CS || g_terrain.method == METHOD_MS || g_terrain.method == METHOD_MS_INPLACE) {
                 char buf[64];
 
                 int maxValue = 8;
-                if (g_terrain.method == METHOD_MS) {
+                if (g_terrain.method == METHOD_MS || g_terrain.method == METHOD_MS_INPLACE) {
                     maxValue = 5;
                 }
 

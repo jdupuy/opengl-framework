@@ -37,12 +37,26 @@ void main()
 {
 
 #if UPDATE_INDIRECT_STRUCT
-    uint cnt = atomicCounter(u_Counter) / UPDATE_INDIRECT_VALUE_DIVIDE + UPDATE_INDIRECT_VALUE_ADD;
+
+# if UPDATE_INDIRECT_USE_RANGE == 0
+    int cnt = int(atomicCounter(u_Counter));
+# else
+    int cnt = int(atomicCounter(u_Counter)) - int(atomicCounter(u_Counter2));
+# endif
+
+    cnt = cnt / UPDATE_INDIRECT_VALUE_DIVIDE + UPDATE_INDIRECT_VALUE_ADD;
 
     u_IndirectCommand[UPDATE_INDIRECT_OFFSET] = cnt;
 
     //Hack: Store counter value in the last reserved field of the draw/dispatch indirect structure
+# if UPDATE_INDIRECT_USE_RANGE == 0
     u_IndirectCommand[7] = atomicCounter(u_Counter);
+# else
+
+    u_IndirectCommand[7] = atomicCounter(u_Counter);// -atomicCounter(u_Counter2);
+    u_IndirectCommand[6] = atomicCounter(u_Counter2);   //Start
+# endif
+
 #endif
 
 
