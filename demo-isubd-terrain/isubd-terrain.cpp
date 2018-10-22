@@ -49,9 +49,6 @@ const size_t subdBufferCapacity = 1 << 28;
 //Forces use of ad-hoc instanced geometry definition, with better vertex reuse
 #define USE_ADHOC_INSTANCED_GEOM        1
 
-//New: In place update of the subd buffer
-#define USE_SUBD_IN_PLACE_UPDATE        1
-
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 //
@@ -90,12 +87,7 @@ struct CameraManager {
 
 // -----------------------------------------------------------------------------
 // Quadtree Manager
-enum { METHOD_TS, METHOD_GS, METHOD_CS, METHOD_MS 
-#if USE_SUBD_IN_PLACE_UPDATE
-    , METHOD_MS_INPLACE
-#endif
-
-};
+enum { METHOD_TS, METHOD_GS, METHOD_CS, METHOD_MS, METHOD_MS_INPLACE};
 enum { SHADING_DIFFUSE, SHADING_NORMALS, SHADING_LOD };
 struct TerrainManager {
     struct { bool displace, cull, freeze, wire, reset, freeze_step; } flags;
@@ -467,6 +459,7 @@ void setShaderMacros(djg_program *djp)
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
+    djgp_push_string(djp, "#define BUFFER_BINDING_DELETED_SUBD %i\n", BUFFER_SUBD2);       //New
 
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER2);
@@ -1743,7 +1736,7 @@ void renderSceneMs() {
     offset = nextOffset;
 }
 
-#if USE_SUBD_IN_PLACE_UPDATE
+#if 1
 
 void renderSceneMs_InPlace() {
     static int offset = 0;
@@ -1793,6 +1786,7 @@ void renderSceneMs_InPlace() {
     // draw terrain
     glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
     glDrawMeshTasksIndirectNV(0);
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
     // update batch
     callUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT,
@@ -2065,9 +2059,7 @@ void renderGui(double cpuDt, double gpuDt)
             };
             if (GLAD_GL_NV_mesh_shader) {
                 eMethods.push_back("Mesh Shader");
-#if USE_SUBD_IN_PLACE_UPDATE
                 eMethods.push_back("Mesh Shader InPlace");
-#endif
             }
 
             ImGui::Text("CPU_dt: %.3f %s",

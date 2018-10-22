@@ -173,9 +173,14 @@ coherent volatile buffer SubdBufferIn {
 };
 
 
+/*layout(std430, binding = BUFFER_BINDING_DELETED_SUBD)
+coherent volatile buffer DeletedSubdBuffer {
+    uint u_DeletedSubdBuffer[];
+};*/
+
 void insertKeys(uint primID, uint keys[2])
 {
-    uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 2) % SUBD_BUFFER_CAPACITY;
+    uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 2);  // % SUBD_BUFFER_CAPACITY
 
     u_SubdBufferIn[idx] = uvec2(primID, keys[0]);
     u_SubdBufferIn[idx+1] = uvec2(primID, keys[1]);
@@ -183,22 +188,59 @@ void insertKeys(uint primID, uint keys[2])
 
 void insertKey(uint primID, uint key)
 {
-    uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 1) % SUBD_BUFFER_CAPACITY;
+    uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 1);     // % SUBD_BUFFER_CAPACITY
 
     u_SubdBufferIn[idx] = uvec2(primID, key);
 }
 
+#if 0
 void deleteKey(uint keyIdx)
 {
-    if (keyIdx > atomicCounter(u_SubdBufferCounterFront)) {
-        uint movedIdx = atomicCounterAdd(u_SubdBufferCounterFront, 1) % SUBD_BUFFER_CAPACITY;
+    //if (keyIdx > atomicCounter(u_SubdBufferCounterFront)) 
+    {
+        uint movedIdx = atomicCounterAdd(u_SubdBufferCounterFront, 1);  // % SUBD_BUFFER_CAPACITY
 
-        if (movedIdx < keyIdx) {
-            u_SubdBufferIn[keyIdx] = u_SubdBufferIn[movedIdx];
-            //u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+        uvec2 movedVal = u_SubdBufferIn[movedIdx];
+
+        if (movedIdx < keyIdx) 
+        {
+           
+            //if (movedVal != uvec2(0, 0)) 
+            {
+                u_SubdBufferIn[keyIdx] = movedVal;
+                //u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+            }
+        } else {
+            if (movedVal != uvec2(0, 0))
+                insertKey(movedVal.x, movedVal.y);
         }
     }
 }
+#else
+
+void deleteKey(uint keyIdx)
+{
+
+    uint movedIdx = atomicCounterAdd(u_SubdBufferCounterFront, 1);  // % SUBD_BUFFER_CAPACITY
+
+    uvec2 movedVal = u_SubdBufferIn[movedIdx];
+
+    //u_SubdBufferIn[keyIdx] = movedVal;
+    //u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+
+    if (movedVal != uvec2(0, 0)) 
+    {
+
+        /*if (movedIdx < keyIdx)
+        {
+            u_SubdBufferIn[keyIdx] = movedVal;
+        } else*/ {
+            insertKey(movedVal.x, movedVal.y);
+        }
+    }
+}
+
+#endif
 
 void updateSubdBuffer(
     uint keyIdx,
