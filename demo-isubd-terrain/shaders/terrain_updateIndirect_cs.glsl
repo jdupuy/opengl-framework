@@ -53,9 +53,10 @@ void main()
     u_IndirectCommand[7] = atomicCounter(u_Counter);
 # else
 
-    u_IndirectCommand[7] = atomicCounter(u_Counter);// -atomicCounter(u_Counter2);
-    u_IndirectCommand[6] = atomicCounter(u_Counter2);   //Start
+    u_IndirectCommand[7] = atomicCounter(u_Counter);// -atomicCounter(u_Counter2);  
 # endif
+
+    u_IndirectCommand[6] = atomicCounter(u_Counter2);   //Start or end
 
 #endif
 

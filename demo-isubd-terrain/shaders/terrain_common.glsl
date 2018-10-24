@@ -16,18 +16,24 @@ readonly buffer IndexBuffer {
     uint u_IndexBuffer[];
 };
 
+
+#if USE_SUBD_IN_PLACE_UPDATE == 0
+
 layout(std430, binding = BUFFER_BINDING_SUBD2)
 buffer SubdBufferOut {
     uvec2 u_SubdBufferOut[];
 };
 
-
-
-#if USE_SUBD_IN_PLACE_UPDATE == 0
 layout(binding = BUFFER_BINDING_SUBD_COUNTER) uniform atomic_uint u_SubdBufferCounter;
+
 #else
+
 layout(binding = COUNTER_BINDING_SUBD_END) uniform atomic_uint u_SubdBufferCounterEnd;
+
+# if SUBD_IN_PLACE_UPDATE_USE_COMPACTION == 0
 layout(binding = COUNTER_BINDING_SUBD_FRONT) uniform atomic_uint u_SubdBufferCounterFront;
+# endif
+
 #endif
 
 
@@ -94,6 +100,7 @@ float computeLod(in vec3 v[3])
     vec3 c = (v[1].xyz + v[2].xyz) / 2.0;
     return computeLod(c);
 }
+
 
 #if USE_SUBD_IN_PLACE_UPDATE == 0
 
@@ -173,11 +180,6 @@ coherent volatile buffer SubdBufferIn {
 };
 
 
-/*layout(std430, binding = BUFFER_BINDING_DELETED_SUBD)
-coherent volatile buffer DeletedSubdBuffer {
-    uint u_DeletedSubdBuffer[];
-};*/
-
 void insertKeys(uint primID, uint keys[2])
 {
     uint idx = atomicCounterAdd(u_SubdBufferCounterEnd, 2);  // % SUBD_BUFFER_CAPACITY
@@ -193,8 +195,27 @@ void insertKey(uint primID, uint key)
     u_SubdBufferIn[idx] = uvec2(primID, key);
 }
 
-#if 0
+
+# if SUBD_IN_PLACE_UPDATE_USE_COMPACTION
+
+layout(binding = COUNTER_BINDING_SUBD_DELETED) uniform atomic_uint u_SubdBufferCounterDeleted;
+
+layout(std430, binding = BUFFER_BINDING_DELETED_SUBD)
+coherent volatile buffer DeletedSubdBuffer {
+    uint u_DeletedSubdBuffer[];
+};
+
 void deleteKey(uint keyIdx)
+{
+    u_SubdBufferIn[keyIdx] = uvec2(0, 0);
+    
+    uint deletedIdx = atomicCounterIncrement(u_SubdBufferCounterDeleted);
+    u_DeletedSubdBuffer[deletedIdx] = keyIdx;
+}
+
+# else
+
+void deleteKey0(uint keyIdx)
 {
     //if (keyIdx > atomicCounter(u_SubdBufferCounterFront)) 
     {
@@ -202,21 +223,21 @@ void deleteKey(uint keyIdx)
 
         uvec2 movedVal = u_SubdBufferIn[movedIdx];
 
-        if (movedIdx < keyIdx) 
+        if (movedIdx < keyIdx)
         {
-           
+
             //if (movedVal != uvec2(0, 0)) 
             {
                 u_SubdBufferIn[keyIdx] = movedVal;
                 //u_SubdBufferIn[movedIdx] = uvec2(0, 0);
             }
-        } else {
+        }
+        else {
             if (movedVal != uvec2(0, 0))
                 insertKey(movedVal.x, movedVal.y);
         }
     }
 }
-#else
 
 void deleteKey(uint keyIdx)
 {
@@ -228,19 +249,20 @@ void deleteKey(uint keyIdx)
     //u_SubdBufferIn[keyIdx] = movedVal;
     //u_SubdBufferIn[movedIdx] = uvec2(0, 0);
 
-    if (movedVal != uvec2(0, 0)) 
+    if (movedVal != uvec2(0, 0))
     {
 
         /*if (movedIdx < keyIdx)
         {
-            u_SubdBufferIn[keyIdx] = movedVal;
+        u_SubdBufferIn[keyIdx] = movedVal;
         } else*/ {
             insertKey(movedVal.x, movedVal.y);
         }
     }
 }
 
-#endif
+# endif
+
 
 void updateSubdBuffer(
     uint keyIdx,
@@ -258,8 +280,8 @@ void updateSubdBuffer(
         uint children[2]; childrenKeys(key, children);
 
         //Delete current
-        u_SubdBufferIn[keyIdx] = uvec2(0, 0);
-        //deleteKey(keyIdx);
+        //u_SubdBufferIn[keyIdx] = uvec2(0, 0);
+        deleteKey(keyIdx);
 
         //Insert children
         insertKeys(primID, children);
@@ -277,8 +299,8 @@ void updateSubdBuffer(
 #if 1
         else{
             //Delete current key
-            u_SubdBufferIn[keyIdx] = uvec2(0, 0);
-            //deleteKey(keyIdx);
+            //u_SubdBufferIn[keyIdx] = uvec2(0, 0);
+            deleteKey(keyIdx);
 
             //Insert parent
             if (/* is zero child ? */isChildZeroKey(key)) {

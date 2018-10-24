@@ -49,6 +49,9 @@ const size_t subdBufferCapacity = 1 << 28;
 //Forces use of ad-hoc instanced geometry definition, with better vertex reuse
 #define USE_ADHOC_INSTANCED_GEOM        1
 
+#define SUBD_IN_PLACE_UPDATE_USE_COMPACTION     1       //New
+#define SUBD_COMPACTION_NUM_THREADS             32
+
 ////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 //
@@ -103,7 +106,7 @@ struct TerrainManager {
 } g_terrain = {
     {true, true, false, false, true, false},
     {std::string(PATH_TO_ASSET_DIRECTORY "./dmap.png"), 0.45f},
-    METHOD_CS, 5,
+    METHOD_MS_INPLACE, 5,
     SHADING_DIFFUSE,
     3,    //
     0,
@@ -183,7 +186,9 @@ enum {
     PROGRAM_SUBD_CS_LOD,    // compute-based pipeline only
     PROGRAM_TERRAIN,
     PROGRAM_UPDATE_INDIRECT,    //Update indirect structures
+    PROGRAM_UPDATE_INDIRECT2,
     PROGRAM_UPDATE_INDIRECT_DRAW,
+    PROGRAM_SUBD_COMPACTION,        //New
     PROGRAM_COUNT
 };
 enum {
@@ -459,7 +464,6 @@ void setShaderMacros(djg_program *djp)
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD1 %i\n", BUFFER_SUBD1);
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD2 %i\n", BUFFER_SUBD2);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD %i\n", BUFFER_CULLED_SUBD1);
-    djgp_push_string(djp, "#define BUFFER_BINDING_DELETED_SUBD %i\n", BUFFER_SUBD2);       //New
 
     djgp_push_string(djp, "#define BUFFER_BINDING_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER);
     djgp_push_string(djp, "#define BUFFER_BINDING_CULLED_SUBD_COUNTER %i\n", BINDING_ATOMIC_COUNTER2);
@@ -470,14 +474,22 @@ void setShaderMacros(djg_program *djp)
 
     if (g_terrain.method == METHOD_MS_INPLACE) {
         djgp_push_string(djp, "#define USE_SUBD_IN_PLACE_UPDATE %i\n", 1);
+        djgp_push_string(djp, "#define SUBD_IN_PLACE_UPDATE_USE_COMPACTION %i\n", SUBD_IN_PLACE_UPDATE_USE_COMPACTION);
 
         djgp_push_string(djp, "#define COUNTER_BINDING_SUBD_END %i\n", BINDING_ATOMIC_COUNTER);
         djgp_push_string(djp, "#define COUNTER_BINDING_SUBD_FRONT %i\n", BINDING_ATOMIC_COUNTER2);
 
+        djgp_push_string(djp, "#define SUBD_COMPACTION_NUM_THREADS %i\n", SUBD_COMPACTION_NUM_THREADS);
+        
     } else {
         djgp_push_string(djp, "#define USE_SUBD_IN_PLACE_UPDATE %i\n", 0);
+        djgp_push_string(djp, "#define SUBD_IN_PLACE_UPDATE_USE_COMPACTION %i\n", SUBD_IN_PLACE_UPDATE_USE_COMPACTION);
     }
     
+
+    djgp_push_string(djp, "#define BUFFER_BINDING_DELETED_SUBD %i\n", BUFFER_SUBD2);       //New
+    djgp_push_string(djp, "#define COUNTER_BINDING_SUBD_DELETED %i\n", BINDING_ATOMIC_COUNTER2);       //New
+
 }
 
 // -----------------------------------------------------------------------------
@@ -592,6 +604,35 @@ bool loadSubdCsLodProgram()
     return (glGetError() == GL_NO_ERROR);
 }
 
+bool loadSubdCompactionProgram()
+{
+    if (g_terrain.method == METHOD_MS_INPLACE) {
+        djg_program *djp = djgp_create();
+        GLuint *program = &g_gl.programs[PROGRAM_SUBD_COMPACTION];
+        char buf[1024];
+
+        LOG("Loading {Compute-Subd-Compaction-Program}\n");
+        setShaderMacros(djp);
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "fcull.glsl"));
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "isubd.glsl"));
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_common.glsl"));
+
+        djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "terrain_subd_compaction_cs.glsl"));
+
+        if (!djgp_to_gl(djp, 460, false, true, program)) {
+            LOG("=> Failure <=\n");
+            djgp_release(djp);
+
+            return false;
+        }
+        djgp_release(djp);
+    }
+
+    return (glGetError() == GL_NO_ERROR);
+}
+
+
+
 // -----------------------------------------------------------------------------
 /**
  * Load the Indirect Program
@@ -665,7 +706,13 @@ bool loadUpdateIndirectPrograms()
     case METHOD_MS:
         return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, false, true, false, 0, 1 << g_terrain.computeThreadCount, 1);
     case METHOD_MS_INPLACE:
+# if SUBD_IN_PLACE_UPDATE_USE_COMPACTION == 0
         return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, true, false, false, 0, 1 << g_terrain.computeThreadCount, 1);
+# else
+        return loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT, true, false, false, false, 0, 1 << g_terrain.computeThreadCount, 1) &&
+            loadUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT2, true, false, true, false, 0, SUBD_COMPACTION_NUM_THREADS, 1);
+# endif
+            
     }
 
     return (glGetError() == GL_NO_ERROR);
@@ -685,6 +732,7 @@ bool loadPrograms()
     if (v) v &= loadTerrainProgram();
     if (v) v &= loadSubdCsLodProgram();
     if (v) v &= loadUpdateIndirectPrograms();
+    if (v) v &= loadSubdCompactionProgram();
 
     return v;
 }
@@ -1752,9 +1800,14 @@ void renderSceneMs_InPlace() {
 
         loadSubdivisionBuffers();
         createAtomicCounters(atomicData);
-        createIndirectCommandBuffer(GL_DRAW_INDIRECT_BUFFER,
-            BUFFER_DISPATCH_INDIRECT,
-            cmd);
+        createIndirectCommandBuffer(GL_DRAW_INDIRECT_BUFFER, BUFFER_DRAW_INDIRECT, cmd);
+
+# if SUBD_IN_PLACE_UPDATE_USE_COMPACTION
+        IndirectCommand cmd2 = {
+            1u, 1u, 1u, 0u, 0u, 0u, 0u, 1u
+        };
+        createIndirectCommandBuffer(GL_DISPATCH_INDIRECT_BUFFER, BUFFER_DISPATCH_INDIRECT, cmd2);
+# endif
 
         offset = 0;
         g_terrain.flags.reset = false;
@@ -1772,27 +1825,58 @@ void renderSceneMs_InPlace() {
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BUFFER_SUBD1, g_gl.buffers[BUFFER_SUBD1]);
 
+# if SUBD_IN_PLACE_UPDATE_USE_COMPACTION
+    //BUFFER_BINDING_DELETED_SUBD
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BUFFER_SUBD2, g_gl.buffers[BUFFER_SUBD2]);
+# endif
+
     glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
-    //glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER2, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
     glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER2, g_gl.buffers[BUFFER_ATOMIC_COUNTER], sizeof(uint32_t) * 1, sizeof(uint32_t));
 
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
-        BUFFER_DISPATCH_INDIRECT,
-        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        BUFFER_DISPATCH_INDIRECT,           //Warning: used dispatch binding
+        g_gl.buffers[BUFFER_DRAW_INDIRECT]);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER,
-        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        g_gl.buffers[BUFFER_DRAW_INDIRECT]);
 
     // draw terrain
     glUseProgram(g_gl.programs[PROGRAM_TERRAIN]);
     glDrawMeshTasksIndirectNV(0);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-    // update batch
+    
+# if SUBD_IN_PLACE_UPDATE_USE_COMPACTION
+    //Compaction pass
+    callUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT2,
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER], sizeof(uint32_t),
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
+        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+
+    glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER, g_gl.buffers[BUFFER_ATOMIC_COUNTER]);
+    glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, BINDING_ATOMIC_COUNTER2, g_gl.buffers[BUFFER_ATOMIC_COUNTER], sizeof(uint32_t) * 1, sizeof(uint32_t));
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BUFFER_SUBD1, g_gl.buffers[BUFFER_SUBD1]);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, BUFFER_SUBD2, g_gl.buffers[BUFFER_SUBD2]);       //BUFFER_BINDING_DELETED_SUBD
+
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,
+        BUFFER_DISPATCH_INDIRECT,           //Warning: used dispatch binding
+        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+    glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+
+    // Dispatch compaction
+    glUseProgram(g_gl.programs[PROGRAM_SUBD_COMPACTION]);
+    glDispatchComputeIndirect(0);
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+# endif
+
+    // update task shader indirect dispatch
     callUpdateIndirectProgram(PROGRAM_UPDATE_INDIRECT,
         g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
-        g_gl.buffers[BUFFER_ATOMIC_COUNTER], sizeof(uint32_t),
-        g_gl.buffers[BUFFER_DISPATCH_INDIRECT]);
+        g_gl.buffers[BUFFER_ATOMIC_COUNTER], 0,
+        g_gl.buffers[BUFFER_DRAW_INDIRECT]);
 
     offset = nextOffset;
 }
