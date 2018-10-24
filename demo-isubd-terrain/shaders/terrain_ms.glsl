@@ -8,7 +8,7 @@
 */
 
 #define USE_OPTIMIZED_TASK_PARAMETER_BLOCK          1
-#define USE_SUBD_KEYS_CULLING                       1       //Experimental
+#define USE_SUBD_KEYS_CULLING                       0       //Experimental
 
 #define NUM_CLIPPING_PLANES                         6
 

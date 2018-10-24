@@ -209,8 +209,8 @@ void deleteKey(uint keyIdx)
 {
     u_SubdBufferIn[keyIdx] = uvec2(0, 0);
     
-    uint deletedIdx = atomicCounterIncrement(u_SubdBufferCounterDeleted);
-    u_DeletedSubdBuffer[deletedIdx] = keyIdx;
+    //uint deletedIdx = atomicCounterIncrement(u_SubdBufferCounterDeleted);
+    //u_DeletedSubdBuffer[deletedIdx] = keyIdx;
 }
 
 # else

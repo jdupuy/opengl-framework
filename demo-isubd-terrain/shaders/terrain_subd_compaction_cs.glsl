@@ -27,26 +27,45 @@ void main() {
     if (keyIdx < (u_IndirectCommand[6] - u_IndirectCommand[7]) )
     {
         
-#  if 1
+#  if 0
         uint movedIdx = atomicCounterSubtract(u_SubdBufferCounterEnd, 1)-1;
         uvec2 movedVal = u_SubdBufferIn[movedIdx];
         //uvec2 movedVal = uvec2(0,0);
 
-        u_SubdBufferIn[keyIdx] = movedVal;
-        u_SubdBufferIn[movedIdx] = uvec2(0, 0);
-#  else
+        //if (movedIdx > keyIdx) {
+            u_SubdBufferIn[keyIdx] = movedVal;
+            u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+        /*} else {
+            uint destdIdx = atomicCounterAdd(u_SubdBufferCounterEnd, 1);
+            u_SubdBufferIn[destdIdx] = movedVal;
+            u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+        }*/
+#  elif 0
         uint movedIdx = atomicCounter(u_SubdBufferCounterEnd) - 1 - threadID;
         uvec2 movedVal = u_SubdBufferIn[movedIdx];
         //uvec2 movedVal = uvec2(0,0);
 
         u_SubdBufferIn[keyIdx] = movedVal;
         u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+#  elif 1
+
+        uvec2 movedVal;
+        //do {
+            uint movedIdx = atomicCounterSubtract(u_SubdBufferCounterEnd, 1) - 1;
+            movedVal = u_SubdBufferIn[movedIdx];
+
+            if (movedVal != uvec2(0, 0)) {
+                u_SubdBufferIn[keyIdx] = movedVal;
+                u_SubdBufferIn[movedIdx] = uvec2(0, 0);
+            }
+
+        //} while (movedVal == uvec2(0, 0));
 #  endif
 
     }
-    else {
+    /*else {
         u_SubdBufferIn[keyIdx] = uvec2(0, 0);
-    }
+    }*/
 #endif
     //u_SubdBufferIn[threadID] = uvec2(0,0);
 }

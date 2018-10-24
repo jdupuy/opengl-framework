@@ -9,7 +9,7 @@
 #line 10
 
 #define USE_OPTIMIZED_TASK_PARAMETER_BLOCK          1
-#define USE_SUBD_KEYS_CULLING                       1       //Experimental
+#define USE_SUBD_KEYS_CULLING                       0       //Experimental
 
 #define NUM_CLIPPING_PLANES                         6
 
@@ -92,7 +92,7 @@ void main()
 
             //if(threadID == (atomicCounter(u_SubdBufferCounterFront)) )
             //    deleteKey(threadID);
-# elif 0
+# elif 1
             uint deletedIdx = atomicCounterIncrement(u_SubdBufferCounterDeleted);
             u_DeletedSubdBuffer[deletedIdx] = threadID;
 # endif
