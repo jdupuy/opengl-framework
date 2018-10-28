@@ -585,9 +585,7 @@ bool loadSphereProgram()
     djgp_push_string(djp, "#define BUFFER_BINDING_TRANSFORMS %i\n", STREAM_TRANSFORM);
     djgp_push_string(djp, "#define BUFFER_BINDING_SPHERES %i\n", STREAM_SPHERES);
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "ggx.glsl"));
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "npf.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "brdf_merl.glsl"));
-    djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "pivot.glsl"));
     djgp_push_file(djp, strcat2(buf, g_app.dir.shader, "sphere.glsl"));
 
     if (!djgp_to_gl(djp, 450, false, true, program)) {
@@ -2045,13 +2043,11 @@ int main(int argc, const char **argv)
 
     for (int i = 1; i < argc; ++i) {
         if (!strcmp("--merl", argv[i])) {
-            int cnt = 0;
-
-            ++i;
+            g_sphere.shading.merl.files.resize(0);
             do {
-                g_sphere.shading.merl.files.push_back(argv[i]);
-            } while ((cnt < argc-i) && strncmp("-", argv[i+cnt], 1));
-            LOG("Note: number of MERL BRDFs set to %i\n", cnt);
+                g_sphere.shading.merl.files.push_back(argv[++i]);
+            } while ((i+1 < argc) && strncmp("-", argv[i+1], 1));
+            LOG("Note: number of MERL BRDFs set to %i\n", (int)g_sphere.shading.merl.files.size());
         } else if (!strcmp("--output-dir", argv[i])) {
             g_app.dir.output = (const char *)argv[++i];
             LOG("Note: output directory set to %s\n", g_app.dir.output);
