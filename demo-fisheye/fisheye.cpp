@@ -23,9 +23,6 @@
 #define DJ_ALGEBRA_IMPLEMENTATION 1
 #include "dj_algebra.h"
 
-#define DJ_BRDF_IMPLEMENTATION 1
-#include "dj_brdf.h"
-
 #define LOG(fmt, ...)  fprintf(stdout, fmt, ##__VA_ARGS__); fflush(stdout);
 
 
