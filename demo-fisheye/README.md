@@ -8,4 +8,4 @@ any 3D spherical objects remains spherical in screen space. It also behaves much
 better for wide field of views.
 
 
-![alt text](fisheye-preview.png "Preview")
+![alt text](fisheye-preview.gif "Preview")
