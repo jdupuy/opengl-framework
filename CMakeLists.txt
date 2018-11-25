@@ -47,6 +47,15 @@ target_link_libraries(hello-imgui glfw imgui)
 unset(SRC_FILES)
 
 # ------------------------------------------------------------------------------
+set(SRC_DIR demo-fisheye)
+include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
+aux_source_directory(${SRC_DIR} SRC_FILES)
+add_executable(fisheye ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
+target_link_libraries(fisheye glfw imgui)
+target_compile_definitions(fisheye PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
+unset(SRC_FILES)
+
+# ------------------------------------------------------------------------------
 set(SRC_DIR demo-merl)
 include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
 aux_source_directory(${SRC_DIR} SRC_FILES)
