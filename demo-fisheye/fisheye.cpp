@@ -1132,14 +1132,11 @@ int main(int argc, const char **argv)
 {
     for (int i = 1; i < argc; ++i) {
         if (!strcmp("--envmap", argv[i])) {
-            int cnt = 0;
-
-            ++i;
+            g_ibl.files.resize(0);
             do {
-                g_ibl.files.push_back(argv[i]);
-                ++i;
-            } while ((cnt < argc-i) && strncmp("-", argv[i], 1));
-            LOG("Note: number of Envmaps set to %i\n", cnt);
+                g_ibl.files.push_back(argv[++i]);
+            } while ((i+1 < argc) && strncmp("-", argv[i+1], 1));
+            LOG("Note: number of Envmaps set to %i\n", (int)g_ibl.files.size());
         } else if (!strcmp("--shader-dir", argv[i])) {
             g_app.dir.shader = argv[++i];
             LOG("Note: shader dir set to %s\n", g_app.dir.shader);
