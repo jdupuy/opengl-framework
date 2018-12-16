@@ -40,8 +40,6 @@ layout(points) in;
 layout(triangle_strip, max_vertices = MAX_VERTICES) out;
 layout(location = 0) out vec2 o_TexCoord;
 
-
-
 void genVertex(in vec4 v[3], vec2 tessCoord, vec2 lodColor)
 {
     vec4 finalVertex = berp(v, tessCoord);
@@ -52,7 +50,6 @@ void genVertex(in vec4 v[3], vec2 tessCoord, vec2 lodColor)
 
 #if SHADING_LOD
     o_TexCoord = lodColor;
-    //o_TexCoord = tessCoord;
 #else
     o_TexCoord = finalVertex.xy * 0.5 + 0.5;
 #endif
@@ -120,15 +117,12 @@ void main()
 
         for (int i = 0; i < stripCnt; ++i) {
             uint key = i + stripCnt;
-            mat3 xf = keyToXform(key);
-            vec2 u1 = (xf * vec3(0.0, 1.0, 1)).xy;
-            vec2 u2 = (xf * vec3(0.0, 0.0, 1)).xy;
-            vec2 u3 = (xf * vec3(0.5, 0.5, 1)).xy;
-            vec2 u4 = (xf * vec3(1.0, 0.0, 1)).xy;
-            genVertex(v, u1, lodColor);
-            genVertex(v, u2, lodColor);
-            genVertex(v, u3, lodColor);
-            genVertex(v, u4, lodColor);
+            vec4 vs[3];  subd(key, v, vs);
+
+            genVertex(vs, vec2(0.0f, 1.0f), lodColor);
+            genVertex(vs, vec2(0.0f, 0.0f), lodColor);
+            genVertex(vs, vec2(0.5f, 0.5f), lodColor);
+            genVertex(vs, vec2(1.0f, 0.0f), lodColor);
         }
         EndPrimitive();
 #endif

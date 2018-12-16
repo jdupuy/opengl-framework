@@ -2,7 +2,6 @@
     (created by Jonathan Dupuy and Cyril Crassin)
 */
 
-#line 5
 //The rest of the code is inside those headers which are included by the C-code:
 //Include isubd.glsl
 
@@ -15,7 +14,6 @@ layout(std430, binding = BUFFER_BINDING_GEOMETRY_INDEXES)
 readonly buffer IndexBuffer {
     uint u_IndexBuffer[];
 };
-
 
 layout(binding = BUFFER_BINDING_SUBD_COUNTER)
 uniform atomic_uint u_SubdBufferCounter;
