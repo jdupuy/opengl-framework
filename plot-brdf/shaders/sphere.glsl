@@ -45,10 +45,10 @@ vec3 evalBrdf(vec3 wi, vec3 wo)
 {
 	float c = clamp(wi.z, 0.0, 1.0);
 #if BRDF_MERL
-	return BRDF(wi, wo, vec3(0, 0, 1), vec3(1, 0, 0), vec3(0, 1, 0));
+    return BRDF(wo, wi, vec3(0, 0, 1), vec3(1, 0, 0), vec3(0, 1, 0));
 #else
 	float pdf;
-	return vec3(ggx_evalp(wi, wo, u_Alpha, pdf)) / wi.z;
+    return vec3(ggx_evalp(wo, wi, u_Alpha, pdf));
 #endif
 }
 

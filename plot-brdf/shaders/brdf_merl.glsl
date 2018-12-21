@@ -130,7 +130,7 @@ vec3 BRDF( vec3 toLight, vec3 toViewer, vec3 normal, vec3 tangent, vec3 bitangen
 		texelFetch(u_MerlSampler, redIndex).r * RED_SCALE,
 		texelFetch(u_MerlSampler, greenIndex).r * GREEN_SCALE,
 		texelFetch(u_MerlSampler, blueIndex).r * BLUE_SCALE
-	);
+    ) * toLight.z;
 #endif
 }
 

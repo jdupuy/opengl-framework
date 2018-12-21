@@ -27,12 +27,46 @@ vec3 ggx_sample(vec2 u, vec3 wi, float alpha);
  */
 
 #define PI 3.141592654
+#define e0 vec3(0, 0, 1)
+
+float sat(float x) {return clamp(x, 0.0f, 1.0f);}
+vec3 inv(vec3 w) {return w / dot(w, w);}
+vec3 g1(vec3 w) {return 2.0f * inv(w + e0) - e0;}
+vec3 g2(vec3 r, vec3 rp) {
+    vec3 tmp = r - rp;
+    vec3 cp1 = cross(r, rp);
+    vec3 cp2 = cross(tmp, cp1);
+    float dp = 1.0f - dot(r, rp);
+    float sc = dp * dp + dot(cp1, cp1);
+
+    return (dp * tmp + cp2) / sc;
+}
+vec3 g3(vec3 r)
+{
+    float z = sqrt(sat(1.0f - dot(r.xy, r.xy)));
+
+    return vec3(r.xy, z);
+}
+vec3 g3inv(vec3 w)
+{
+    return vec3(w.xy, 0.0f);
+}
+float dgdr(vec3 r, vec3 rp)
+{
+    float num = 1.0f - dot(rp, rp);
+    vec3 cp1 = cross(r, rp);
+    float dp = 1.0f + dot(r, rp);
+    float den = dp * dp + dot(cp1, cp1);
+
+    return (num * num) / (den * den);
+}
 
 // -----------------------------------------------------------------------------
 // Evaluation
 float ggx_evalp(vec3 wi, vec3 wo, float alpha, out float pdf)
 {
 	if (wo.z > 0.0 && wi.z > 0.0) {
+#if 0
 		vec3 wh = normalize(wi + wo);
 		vec3 wh_xform = vec3(wh.xy / alpha, wh.z);
 		vec3 wi_xform = vec3(wi.xy * alpha, wi.z);
@@ -54,6 +88,13 @@ float ggx_evalp(vec3 wi, vec3 wo, float alpha, out float pdf)
 
 		pdf = (Dvis / (cos_theta_d * 4.0));
 		return pdf * Gcond;
+#else
+        vec3 rp = g1(wi);
+        vec3 r = g3inv(wo);
+
+        return dgdr(r, rp) * wi.z / PI;
+
+#endif
 	}
 	pdf = 0.0;
 	return 0.0;
