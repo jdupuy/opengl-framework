@@ -109,12 +109,3 @@ target_link_libraries(isubd-ccmesh glfw imgui)
 target_compile_definitions(isubd-ccmesh PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
 unset(SRC_FILES)
 
-# ------------------------------------------------------------------------------
-set(SRC_DIR demo-isubd-loop)
-include_directories(${SRC_DIR} ${IMGUI_INCLUDE_DIR})
-aux_source_directory(${SRC_DIR} SRC_FILES)
-add_executable(isubd-loop ${SRC_FILES} ${SRC_DIR}/glad/glad.c)
-target_link_libraries(isubd-loop glfw imgui)
-target_compile_definitions(isubd-loop PUBLIC -DPATH_TO_SRC_DIRECTORY="${CMAKE_SOURCE_DIR}/${SRC_DIR}/" -DPATH_TO_ASSET_DIRECTORY="${CMAKE_SOURCE_DIR}/assets/")
-unset(SRC_FILES)
-
