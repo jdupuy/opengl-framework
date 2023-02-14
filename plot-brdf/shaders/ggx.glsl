@@ -30,8 +30,6 @@ vec3 ggx_sample(vec2 u, vec3 wi, float alpha);
 #define e0 vec3(0, 0, 1)
 
 float sat(float x) {return clamp(x, 0.0f, 1.0f);}
-vec3 inv(vec3 w) {return w / dot(w, w);}
-vec3 g1(vec3 w) {return 2.0f * inv(w + e0) - e0;}
 vec3 g2(vec3 r, vec3 rp) {
     vec3 tmp = r - rp;
     vec3 cp1 = cross(r, rp);
@@ -51,11 +49,11 @@ vec3 g3inv(vec3 w)
 {
     return vec3(w.xy, 0.0f);
 }
-float dgdr(vec3 r, vec3 rp)
+float Jacobian(vec3 r, vec3 rp)
 {
     float num = 1.0f - dot(rp, rp);
     vec3 cp1 = cross(r, rp);
-    float dp = 1.0f + dot(r, rp);
+    float dp = 1.0f - dot(r, rp);
     float den = dp * dp + dot(cp1, cp1);
 
     return (num * num) / (den * den);
@@ -89,10 +87,10 @@ float ggx_evalp(vec3 wi, vec3 wo, float alpha, out float pdf)
 		pdf = (Dvis / (cos_theta_d * 4.0));
 		return pdf * Gcond;
 #else
-        vec3 rp = g1(wi);
+        vec3 rp = g3inv(wi);
         vec3 r = g3inv(wo);
 
-        return dgdr(r, rp) * wi.z / PI;
+        return Jacobian(r, -rp) * wi.z / PI;
 
 #endif
 	}
@@ -201,10 +199,33 @@ vec3 ggx__u2_to_h2(vec2 u, vec3 wi, float r1, float r2)
 	return wm;
 }
 
+vec3 sampleGGXVNDF(vec3 Ve, float alpha_x, float alpha_y, float U1, float U2)
+{
+	// Section 3.2: transforming the view direction to the hemisphere configuration
+	vec3 Vh = normalize(vec3(alpha_x * Ve.x, alpha_y * Ve.y, Ve.z));
+	// Section 4.1: orthonormal basis (with special case if cross product is zero)
+	float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+	vec3 T1 = lensq > 0 ? vec3(-Vh.y, Vh.x, 0) * inversesqrt(lensq) : vec3(1,0,0);
+	vec3 T2 = cross(Vh, T1);
+	// Section 4.2: parameterization of the projected area
+	float r = sqrt(U1);	
+	float phi = 2.0 * PI * U2;	
+	float t1 = r * cos(phi);
+	float t2 = r * sin(phi);
+	float s = 0.5 * (1.0 + Vh.z);
+	t2 = (1.0 - s)*sqrt(1.0 - t1*t1) + s*t2;
+	// Section 4.3: reprojection onto hemisphere
+	vec3 Nh = t1*T1 + t2*T2 + sqrt(max(0.0, 1.0 - t1*t1 - t2*t2))*Vh;
+	// Section 3.4: transforming the normal back to the ellipsoid configuration
+	vec3 Ne = normalize(vec3(alpha_x * Nh.x, alpha_y * Nh.y, max(0.0, Nh.z)));	
+	return Ne;
+}
+
 // -----------------------------------------------------------------------------
 // importance sample: map the unit square to the hemisphere
 vec3 ggx_sample(vec2 u, vec3 wi, float alpha)
 {
+    return sampleGGXVNDF(wi, alpha, alpha, u.x, u.y);
 	return ggx__u2_to_h2(u, wi, alpha, alpha);
 }
 
